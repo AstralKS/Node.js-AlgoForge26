@@ -1,0 +1,27 @@
+Patient: Amit Patel | ID: b60d8371-7a43-4285-b888-9286e875a634
+WA: +919518979027
+
+=== SYMPTOMS (last 24h): 12 ===
+  [whatsapp] body pain | severity: 5
+  [whatsapp] having headache | severity: 5
+  [whatsapp] body temperature high around 101F | severity: 7
+  [whatsapp] feeling very tired since 3 days | severity: 6
+  [whatsapp] body pain | severity: 6
+  [whatsapp] headache | severity: 6
+  [whatsapp] body temperature high around 101F | severity: 7
+  [whatsapp] feeling very tired since 3 days | severity: 7
+  [whatsapp] body pain | severity: 7
+  [whatsapp] having headache | severity: 6
+  [whatsapp] feeling very tired since 3 days | severity: 8
+  [manual] Persistent headache for 3 days with mild fever 100F and body ache | severity: 6
+
+=== BIOMETRICS (last 24h): 4 ===
+  temperature: 101 F
+  glucose: 175 mg/dL
+  bp: 135/85 mmHg
+  bp: 140/90 mmHg
+
+=== RESULT ===
+Symptoms from WhatsApp: 11
+Biometrics stored: 4
+PIPELINE: VERIFIED OK
