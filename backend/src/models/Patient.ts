@@ -69,8 +69,8 @@ export async function getPatientsByDoctor(doctorId: string) {
 }
 
 export async function getPatientByWhatsApp(whatsappNumber: string) {
-  // Normalize: strip 'whatsapp:' prefix if present
-  const normalized = whatsappNumber.replace('whatsapp:', '');
+  // Normalize: strip 'whatsapp:' prefix and any leading '+' if present
+  const normalized = whatsappNumber.replace('whatsapp:', '').replace('+', '');
   const { data, error } = await supabaseAdmin
     .from(TABLE)
     .select('*, users!patients_user_id_fkey(*)')

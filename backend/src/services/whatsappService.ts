@@ -15,9 +15,11 @@ export async function sendWhatsAppMessage(to: string, body: string) {
 
   const url = `https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages.json`;
 
+  const formattedTo = to.startsWith('+') ? to : `+${to}`;
+  
   const params = new URLSearchParams({
     From: env.TWILIO_WHATSAPP_FROM,
-    To: `whatsapp:${to}`,
+    To: `whatsapp:${formattedTo}`,
     Body: body,
   });
 
@@ -31,7 +33,7 @@ export async function sendWhatsAppMessage(to: string, body: string) {
       body: params.toString(),
     });
 
-    const data = await response.json();
+    const data = (await response.json()) as any;
 
     if (!response.ok) {
       logger.error('Twilio error:', data);
