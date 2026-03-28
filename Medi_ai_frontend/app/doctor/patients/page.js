@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import {
@@ -11,12 +11,17 @@ import {
   X,
   UserPlus,
   Mic,
+  MicOff,
   Calendar,
   FileText,
   Pill,
   AlertCircle,
+  Loader2,
+  CheckCircle,
 } from "lucide-react";
 import { patients as initialPatients } from "@/lib/data";
+
+const AI_URL = process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
 
 function AddPatientModal({ isOpen, onClose }) {
   const [formData, setFormData] = useState({
@@ -27,7 +32,103 @@ function AddPatientModal({ isOpen, onClose }) {
     notes: "",
   });
 
+  // ── Recording state ──
+  const [recording, setRecording] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [transcript, setTranscript] = useState(null);
+  const [transcriptError, setTranscriptError] = useState(null);
+
+  const mediaRecorder = useRef(null);
+  const audioChunks = useRef([]);
+  const timerRef = useRef(null);
+
   if (!isOpen) return null;
+
+  const startRecording = async () => {
+    try {
+      setTranscript(null);
+      setTranscriptError(null);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      // Pick the best supported format — AssemblyAI accepts webm/ogg/mp4/wav
+      const mimeType = [
+        "audio/wav",
+        "audio/ogg;codecs=opus",
+        "audio/ogg",
+        "audio/webm;codecs=opus",
+        "audio/webm",
+      ].find((m) => MediaRecorder.isTypeSupported(m)) || "";
+
+      const ext = mimeType.includes("ogg") ? "ogg" : mimeType.includes("wav") ? "wav" : "webm";
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+      audioChunks.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunks.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setProcessing(true);
+        try {
+          const blob = new Blob(audioChunks.current, { type: mimeType || "audio/webm" });
+          const formPayload = new FormData();
+          formPayload.append("file", blob, `recording.${ext}`);
+
+          const res = await fetch(`${AI_URL}/api/transcribe`, {
+            method: "POST",
+            body: formPayload,
+          });
+
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || `HTTP ${res.status}`);
+          }
+
+          const data = await res.json();
+          const soap = data.patient_friendly_report || {};
+          const rawText = data.whisper_raw_transcription || "";
+
+          // Auto-fill form fields from SOAP note
+          setTranscript({ soap, rawText });
+          if (soap.subjective) {
+            setFormData((prev) => ({
+              ...prev,
+              symptoms: soap.subjective,
+              notes: (prev.notes ? prev.notes + "\n\n" : "") +
+                (soap.assessment ? `Assessment: ${soap.assessment}` : "") +
+                (soap.plan ? `\nPlan: ${soap.plan}` : ""),
+            }));
+          } else if (rawText) {
+            setFormData((prev) => ({ ...prev, symptoms: rawText }));
+          }
+        } catch (err) {
+          setTranscriptError(err.message);
+        } finally {
+          setProcessing(false);
+        }
+      };
+
+      recorder.start(250); // collect in 250ms chunks
+      mediaRecorder.current = recorder;
+      setRecording(true);
+      setRecordingTime(0);
+      timerRef.current = setInterval(() => setRecordingTime((t) => t + 1), 1000);
+    } catch (err) {
+      setTranscriptError("Microphone access denied: " + err.message);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder.current && recording) {
+      mediaRecorder.current.stop();
+      setRecording(false);
+      clearInterval(timerRef.current);
+    }
+  };
+
+  const formatTime = (s) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
   return (
     <AnimatePresence>
@@ -43,18 +144,18 @@ function AddPatientModal({ isOpen, onClose }) {
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="bg-white rounded-2xl w-full max-w-lg shadow-2xl"
+          className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-border">
+          <div className="flex items-center justify-between p-6 border-b border-border sticky top-0 bg-white z-10">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-light flex items-center justify-center">
                 <UserPlus className="w-5 h-5 text-white" />
               </div>
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Add New Patient</h2>
-                <p className="text-xs text-gray-400">Fill in patient details</p>
+                <p className="text-xs text-gray-400">Fill in patient details or record a consultation</p>
               </div>
             </div>
             <button
@@ -133,11 +234,103 @@ function AddPatientModal({ isOpen, onClose }) {
               />
             </div>
 
-            {/* Voice Recording Button */}
-            <button className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-primary-50 to-primary-100 text-primary rounded-xl font-medium text-sm hover:from-primary-100 hover:to-primary-200 transition-all">
-              <Mic className="w-5 h-5" />
-              Start Voice Recording
-            </button>
+            {/* ── Voice Recording Section ── */}
+            <div className="border border-border rounded-xl overflow-hidden">
+              <div className="p-3 bg-primary-50 flex items-center gap-2 border-b border-border">
+                <Mic className="w-4 h-4 text-primary" />
+                <span className="text-sm font-semibold text-primary">Consultation Recorder</span>
+                <span className="ml-auto text-xs text-gray-400">AI auto-fills from voice</span>
+              </div>
+
+              <div className="p-4 space-y-3">
+                {/* Recording Button */}
+                {!processing && (
+                  <button
+                    type="button"
+                    onClick={recording ? stopRecording : startRecording}
+                    className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-medium text-sm transition-all ${
+                      recording
+                        ? "bg-red-50 text-red-600 hover:bg-red-100 animate-pulse"
+                        : "bg-gradient-to-r from-primary-50 to-primary-100 text-primary hover:from-primary-100 hover:to-primary-200"
+                    }`}
+                  >
+                    {recording ? (
+                      <>
+                        <MicOff className="w-5 h-5" />
+                        Stop Recording — {formatTime(recordingTime)}
+                      </>
+                    ) : (
+                      <>
+                        <Mic className="w-5 h-5" />
+                        Start Voice Recording
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {/* Processing State */}
+                {processing && (
+                  <div className="flex items-center justify-center gap-3 py-3 text-primary">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span className="text-sm font-medium">Transcribing with AssemblyAI…</span>
+                  </div>
+                )}
+
+                {/* Error */}
+                {transcriptError && (
+                  <div className="bg-red-50 text-red-700 text-sm rounded-lg px-3 py-2">
+                    ⚠️ {transcriptError}
+                  </div>
+                )}
+
+                {/* Success / Transcript + SOAP Preview */}
+                {transcript && !processing && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="space-y-3"
+                  >
+                    {/* Success banner */}
+                    <div className="flex items-center gap-2 text-green-700 text-sm font-medium">
+                      <CheckCircle className="w-4 h-4" />
+                      Transcription complete — form auto-filled!
+                    </div>
+
+                    {/* Raw transcript */}
+                    {transcript.rawText && (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                          📝 Raw Transcript
+                        </p>
+                        <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 max-h-36 overflow-y-auto text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                          {transcript.rawText}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* SOAP Note */}
+                    {transcript.soap && Object.keys(transcript.soap).length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                          🩺 AI Clinical Note (SOAP)
+                        </p>
+                        <div className="bg-gray-50 border border-border rounded-xl p-3 space-y-1.5 text-xs text-gray-700 max-h-48 overflow-y-auto">
+                          {Object.entries(transcript.soap).map(([k, v]) =>
+                            v ? (
+                              <div key={k}>
+                                <span className="font-semibold capitalize text-primary">{k}:</span>{" "}
+                                {typeof v === "string" ? v : JSON.stringify(v)}
+                              </div>
+                            ) : null
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+
+              </div>
+            </div>
           </div>
 
           {/* Footer */}

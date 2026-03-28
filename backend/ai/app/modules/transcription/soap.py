@@ -66,6 +66,29 @@ def build_soap_note(speaker_segments: list[dict], roles: dict[str, str] | None =
     Build a SOAP note from labelled transcript segments.
     speaker_segments: [{start, end, text, speaker}, ...]
     roles:            {speaker_id: "Doctor" | "Patient"}
+    Returns a formatted text block.
+    """
+    d = build_soap_dict(speaker_segments, roles)
+
+    def sec(title, text):
+        return f"{title}\n  • {text}"
+
+    return "\n".join([
+        "=" * 52,
+        "        SOAP CLINICAL NOTE (BERT Analysis)",
+        "=" * 52,
+        sec("S — Subjective (Patient Reports):", d["subjective"]),
+        sec("O — Objective (Clinician Findings):", d["objective"]),
+        sec("A — Assessment:", d["assessment"]),
+        sec("P — Plan:", d["plan"]),
+        "=" * 52,
+    ])
+
+
+def build_soap_dict(speaker_segments: list[dict], roles: dict[str, str] | None = None) -> dict:
+    """
+    Build a structured dict SOAP note from labelled transcript segments.
+    Returns {subjective, objective, assessment, plan} as plain strings.
     """
     roles = roles or {}
 
@@ -78,60 +101,50 @@ def build_soap_note(speaker_segments: list[dict], roles: dict[str, str] | None =
     patient_full = " ".join(patient_text)
     doctor_full  = " ".join(doctor_text)
 
-    # Extract all clinical entities from the full conversation
     e = _extract(full_text)
 
-    # ── S: Subjective ─────────────────────────────────────────────────────────
-    s = []
+    # S — Subjective
+    s_parts = []
     if e["symptoms"]:
-        s.append("Symptoms reported: " + ", ".join(e["symptoms"]))
+        s_parts.append("Symptoms reported: " + ", ".join(e["symptoms"]))
     if e["durations"]:
-        s.append("Reported duration/frequency: " + ", ".join(e["durations"]))
-    if not s:
-        s.append((patient_full[:140] + "…") if patient_full else "No subjective complaints transcribed")
+        s_parts.append("Duration/frequency: " + ", ".join(e["durations"]))
+    if not s_parts:
+        s_parts.append((patient_full[:200] + "…") if patient_full else "No subjective complaints transcribed")
+    subjective = "; ".join(s_parts)
 
-    # ── O: Objective ──────────────────────────────────────────────────────────
-    o = []
+    # O — Objective
     if doctor_full:
-        o.append("Clinician notes: " + (doctor_full[:140] + "…" if len(doctor_full) > 140 else doctor_full))
+        objective = "Clinician notes: " + (doctor_full[:200] + "…" if len(doctor_full) > 200 else doctor_full)
     else:
-        o.append("No independent clinician observations recorded")
+        objective = "No independent clinician observations recorded"
 
-    # ── A: Assessment ─────────────────────────────────────────────────────────
-    a = []
+    # A — Assessment
+    a_parts = []
     if e["diseases"]:
-        a.append("Findings/Disorders: " + ", ".join(e["diseases"]))
+        a_parts.append("Findings: " + ", ".join(e["diseases"]))
     elif e["symptoms"]:
-        a.append("Presenting with: " + ", ".join(e["symptoms"][:3]))
-    a.append("Further evaluation required for definitive diagnosis")
+        a_parts.append("Presenting with: " + ", ".join(e["symptoms"][:3]))
+    a_parts.append("Further evaluation required for definitive diagnosis")
+    assessment = "; ".join(a_parts)
 
-    # ── P: Plan ───────────────────────────────────────────────────────────────
-    p = []
-    meds   = e["medications"]
-    doses  = e["dosages"]
-    
-    for i, med in enumerate(meds):
-        parts = [f"Prescribe {med}"]
-        if i < len(doses):
-            parts.append(doses[i])
-        p.append(" ".join(parts))
-        
-    if not p:
-        p.append("Treatment plan to be determined")
+    # P — Plan
+    p_parts = []
+    for i, med in enumerate(e["medications"]):
+        dose = e["dosages"][i] if i < len(e["dosages"]) else ""
+        p_parts.append(f"Prescribe {med}" + (f" {dose}" if dose else ""))
+    if not p_parts:
+        p_parts.append("Treatment plan to be determined")
+    plan = "; ".join(p_parts)
 
-    def sec(title, items):
-        return f"{title}\n" + "\n".join(f"  • {item}" for item in items)
+    return {
+        "subjective": subjective,
+        "objective":  objective,
+        "assessment": assessment,
+        "plan":       plan,
+    }
 
-    return "\n".join([
-        "=" * 52,
-        "        SOAP CLINICAL NOTE (BERT Analysis)",
-        "=" * 52,
-        sec("S — Subjective (Patient Reports):", s),
-        sec("O — Objective (Clinician Findings):", o),
-        sec("A — Assessment:", a),
-        sec("P — Plan:", p),
-        "=" * 52,
-    ])
+
 
 
 def save_note(note: str, path: str = "clinical_note.txt"):
