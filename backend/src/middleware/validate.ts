@@ -1,0 +1,32 @@
+import { Request, Response, NextFunction } from 'express';
+import { ZodSchema, ZodError } from 'zod';
+
+/**
+ * Zod validation middleware factory
+ * Usage: router.post('/path', validate(mySchema), controller)
+ */
+export function validate(schema: ZodSchema, source: 'body' | 'query' | 'params' = 'body') {
+  return (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = schema.parse(req[source]);
+      req[source] = data; // replace with parsed/cleaned data
+      next();
+    } catch (err) {
+      if (err instanceof ZodError) {
+        res.status(400).json({
+          success: false,
+          error: {
+            message: 'Validation failed',
+            code: 'VALIDATION_ERROR',
+            details: err.errors.map(e => ({
+              field: e.path.join('.'),
+              message: e.message,
+            })),
+          },
+        });
+        return;
+      }
+      next(err);
+    }
+  };
+}

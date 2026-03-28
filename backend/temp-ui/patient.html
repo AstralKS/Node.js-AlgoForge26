@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MediAI — Patient Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="header">
+    <div class="logo">🏥 MediAI</div>
+    <div class="user-info">
+      <span class="role-badge patient">Patient</span>
+      <span id="patient-name">Loading...</span>
+      <a href="index.html" class="btn btn-outline" style="padding:6px 12px;font-size:12px;">Logout</a>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('overview',this)">📊 Overview</button>
+      <button class="tab" onclick="showTab('symptoms',this)">🤒 Symptoms</button>
+      <button class="tab" onclick="showTab('medications',this)">💊 Medications</button>
+      <button class="tab" onclick="showTab('biometrics',this)">📈 Biometrics</button>
+      <button class="tab" onclick="showTab('ai',this)">🤖 AI</button>
+      <button class="tab" onclick="showTab('whatsapp',this)">📱 WhatsApp</button>
+    </div>
+
+    <div id="tab-overview" class="tab-content">
+      <div class="grid grid-4">
+        <div class="card"><div class="stat-value" id="stat-symptoms">-</div><div class="stat-label">Symptoms (7d)</div></div>
+        <div class="card"><div class="stat-value" id="stat-meds">-</div><div class="stat-label">Active Meds</div></div>
+        <div class="card"><div class="stat-value" id="stat-adherence">-</div><div class="stat-label">Adherence</div></div>
+        <div class="card"><div class="stat-value" id="stat-reports">-</div><div class="stat-label">Reports</div></div>
+      </div>
+      <h2 style="margin:20px 0 12px">Recent Symptoms</h2>
+      <div id="recent-symptoms"></div>
+      <h2 style="margin:20px 0 12px">AI Reports</h2>
+      <div id="ai-reports"></div>
+    </div>
+
+    <div id="tab-symptoms" class="tab-content" style="display:none">
+      <div class="card">
+        <h3>Log New Symptom</h3>
+        <div class="form-group"><label>Description</label><textarea id="symptom-desc" placeholder="Describe symptoms..."></textarea></div>
+        <div class="grid grid-2">
+          <div class="form-group"><label>Severity (1-10)</label><input type="number" id="symptom-severity" min="1" max="10" value="5"></div>
+          <div class="form-group"><label>Source</label><select id="symptom-source"><option value="manual">Manual</option><option value="whatsapp">WhatsApp</option><option value="voice">Voice</option></select></div>
+        </div>
+        <div class="form-group"><label><input type="checkbox" id="symptom-ai" checked> Run AI Analysis</label></div>
+        <button class="btn btn-primary btn-block" onclick="logSymptom()">📋 Log Symptom</button>
+      </div>
+      <h2 style="margin:20px 0 12px">History</h2>
+      <div id="symptom-list"></div>
+    </div>
+
+    <div id="tab-medications" class="tab-content" style="display:none">
+      <div class="card">
+        <h3>Add Medication</h3>
+        <div class="grid grid-2">
+          <div class="form-group"><label>Name</label><input type="text" id="med-name" placeholder="e.g., Metformin"></div>
+          <div class="form-group"><label>Dosage</label><input type="text" id="med-dosage" placeholder="e.g., 500mg"></div>
+          <div class="form-group"><label>Frequency</label><input type="text" id="med-frequency" placeholder="e.g., Twice daily"></div>
+          <div class="form-group"><label>Start Date</label><input type="date" id="med-start"></div>
+        </div>
+        <button class="btn btn-primary btn-block" onclick="addMedication()">💊 Add</button>
+      </div>
+      <h2 style="margin:20px 0 12px">Current Medications</h2>
+      <div id="medication-list"></div>
+    </div>
+
+    <div id="tab-biometrics" class="tab-content" style="display:none">
+      <div class="card">
+        <h3>Log Biometric</h3>
+        <div class="grid grid-3">
+          <div class="form-group"><label>Type</label><select id="bio-type" onchange="autoUnit()"><option value="bp">BP</option><option value="glucose">Glucose</option><option value="heart_rate">Heart Rate</option><option value="temperature">Temperature</option><option value="weight">Weight</option><option value="spo2">SpO2</option></select></div>
+          <div class="form-group"><label>Value</label><input type="text" id="bio-value" placeholder="e.g., 120/80"></div>
+          <div class="form-group"><label>Unit</label><input type="text" id="bio-unit" value="mmHg"></div>
+        </div>
+        <button class="btn btn-primary btn-block" onclick="logBiometric()">📈 Log</button>
+      </div>
+      <h2 style="margin:20px 0 12px">Recent Readings</h2>
+      <div id="biometric-list"></div>
+    </div>
+
+    <div id="tab-ai" class="tab-content" style="display:none">
+      <div class="grid grid-2">
+        <div class="card"><h3>🤖 Analyze Text</h3><div class="form-group"><textarea id="ai-text" rows="4" placeholder="Describe symptoms..."></textarea></div><button class="btn btn-primary btn-block" onclick="analyzeText()">Analyze</button></div>
+        <div class="card"><h3>📊 Weekly Report</h3><p style="color:var(--text-secondary);margin-bottom:12px">AI summary of health data</p><button class="btn btn-primary btn-block" onclick="generateReport()">Generate</button><button class="btn btn-outline btn-block" style="margin-top:8px" onclick="evaluateRisk()">🎯 Risk Eval</button></div>
+      </div>
+      <div id="ai-response" class="card" style="margin-top:16px"><div class="empty-state"><div class="icon">🤖</div><p>Run analysis to see results</p></div></div>
+    </div>
+
+    <div id="tab-whatsapp" class="tab-content" style="display:none">
+      <div class="card">
+        <h3>📱 Simulate WhatsApp Message</h3>
+        <div class="form-group"><textarea id="wa-message" rows="4" placeholder="Type a patient WhatsApp message..."></textarea></div>
+        <button class="btn btn-primary btn-block" onclick="simulateWA()">📱 Process</button>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-outline" style="font-size:11px;padding:4px 10px" onclick="loadSample(0)">Symptoms</button>
+          <button class="btn btn-outline" style="font-size:11px;padding:4px 10px" onclick="loadSample(1)">Biometrics</button>
+          <button class="btn btn-outline" style="font-size:11px;padding:4px 10px" onclick="loadSample(2)">Meds</button>
+          <button class="btn btn-outline" style="font-size:11px;padding:4px 10px" onclick="loadSample(3)">Urgent</button>
+        </div>
+      </div>
+      <div id="wa-response" class="card" style="margin-top:16px"><div class="empty-state"><div class="icon">📱</div><p>Send a message to process</p></div></div>
+    </div>
+  </div>
+
+  <script src="patient.js"></script>
+</body>
+</html>

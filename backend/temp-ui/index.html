@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MediAI — Login</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-box">
+      <h1>🏥 MediAI</h1>
+      <p>AI-Powered Patient Health Monitoring</p>
+
+      <div class="login-options">
+        <a href="patient.html" class="login-card patient" id="login-patient">
+          <div class="icon">🩺</div>
+          <h3>Patient</h3>
+          <p>View your health data, symptoms, and AI insights</p>
+        </a>
+
+        <a href="doctor.html" class="login-card doctor" id="login-doctor">
+          <div class="icon">👨‍⚕️</div>
+          <h3>Doctor</h3>
+          <p>Monitor patients, review AI reports, manage alerts</p>
+        </a>
+      </div>
+
+      <div style="margin-top: 40px;">
+        <button class="btn btn-outline" id="btn-seed" onclick="seedData()">
+          🌱 Seed Sample Data
+        </button>
+        <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">
+          Creates sample patients, doctors, and health data in Supabase
+        </p>
+      </div>
+
+      <div style="margin-top: 20px;">
+        <button class="btn btn-outline" onclick="checkHealth()">
+          ❤️ Health Check
+        </button>
+      </div>
+
+      <div id="status" style="margin-top: 20px;"></div>
+    </div>
+  </div>
+
+  <script>
+    const API = '';
+
+    async function seedData() {
+      const btn = document.getElementById('btn-seed');
+      const status = document.getElementById('status');
+      btn.disabled = true;
+      btn.textContent = '⏳ Seeding...';
+      try {
+        const res = await fetch(`${API}/api/seed`, { method: 'POST' });
+        const data = await res.json();
+        status.innerHTML = `<div class="card" style="text-align:left;margin-top:16px;"><h3>✅ Seeded!</h3><pre class="json-output">${JSON.stringify(data, null, 2)}</pre></div>`;
+      } catch (err) {
+        status.innerHTML = `<div class="card" style="border-color:var(--accent-danger)"><h3>❌ Error</h3><p>${err.message}</p></div>`;
+      }
+      btn.disabled = false;
+      btn.textContent = '🌱 Seed Sample Data';
+    }
+
+    async function checkHealth() {
+      const status = document.getElementById('status');
+      try {
+        const res = await fetch(`${API}/api/health`);
+        const data = await res.json();
+        status.innerHTML = `<div class="card" style="text-align:left;margin-top:16px;"><h3>❤️ Server Status</h3><pre class="json-output">${JSON.stringify(data, null, 2)}</pre></div>`;
+      } catch (err) {
+        status.innerHTML = `<div class="card" style="border-color:var(--accent-danger)"><h3>❌ Server Offline</h3><p>${err.message}</p></div>`;
+      }
+    }
+  </script>
+</body>
+</html>
