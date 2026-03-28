@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import Link from "next/link";
 import {
   Pill,
   HeartPulse,
@@ -15,9 +14,9 @@ import {
   User,
   Activity,
   Droplets,
-  MessageSquare,
-  ArrowUpRight,
-  Stethoscope,
+  Loader2,
+  AlertCircle,
+  Plus,
 } from "lucide-react";
 import {
   LineChart,
@@ -28,7 +27,11 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { medications, healthLogs, aiMessages, chartData } from "@/lib/data";
+import { useAuth } from "@/lib/auth-context";
+import * as medicationService from "@/lib/services/medicationService";
+import * as biometricService from "@/lib/services/biometricService";
+import * as symptomService from "@/lib/services/symptomService";
+import * as aiService from "@/lib/services/aiService";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -40,14 +43,16 @@ const fadeUp = {
 };
 
 function GreetingSection() {
+  const { user } = useAuth();
   const hour = new Date().getHours();
   const greeting =
     hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
+  const name = user?.name?.split(" ")[0] || "Patient";
 
   return (
     <motion.div variants={fadeUp} custom={0} className="mb-6">
       <h1 className="text-2xl font-bold text-gray-900">
-        {greeting}, <span className="text-primary">User</span> 👋
+        {greeting}, <span className="text-primary">{name}</span> 👋
       </h1>
       <p className="text-gray-500 mt-1">Here&apos;s your health summary for today</p>
     </motion.div>
@@ -55,6 +60,55 @@ function GreetingSection() {
 }
 
 function MedicationCard() {
+  const { patientId } = useAuth();
+  const [medications, setMedications] = useState([]);
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loggingId, setLoggingId] = useState(null);
+
+  useEffect(() => {
+    if (!patientId) return;
+    Promise.all([
+      medicationService.getActiveMedications(patientId),
+      medicationService.getMedicationLogs(patientId),
+    ])
+      .then(([meds, logData]) => {
+        setMedications(Array.isArray(meds) ? meds : []);
+        setLogs(Array.isArray(logData) ? logData : []);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [patientId]);
+
+  const todayStr = new Date().toISOString().split("T")[0];
+  const todayLogs = logs.filter((l) => l.scheduled_time?.startsWith(todayStr) || l.created_at?.startsWith(todayStr));
+
+  const isTakenToday = (medId) => todayLogs.some((l) => l.medication_id === medId && l.taken);
+
+  const handleToggle = async (med) => {
+    if (isTakenToday(med.id)) return;
+    setLoggingId(med.id);
+    try {
+      const log = await medicationService.logMedication({
+        medication_id: med.id,
+        patient_id: patientId,
+        taken: true,
+        scheduled_time: new Date().toISOString(),
+        actual_time: new Date().toISOString(),
+      });
+      setLogs((prev) => [...prev, log]);
+    } catch {}
+    setLoggingId(null);
+  };
+
+  if (loading) {
+    return (
+      <motion.div variants={fadeUp} custom={1} className="card p-5 flex items-center justify-center min-h-[200px]">
+        <Loader2 className="w-6 h-6 text-primary animate-spin" />
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div variants={fadeUp} custom={1} className="card p-5">
       <div className="flex items-center gap-3 mb-4">
@@ -63,37 +117,113 @@ function MedicationCard() {
         </div>
         <div>
           <h3 className="font-semibold text-gray-900">Today&apos;s Medication</h3>
-          <p className="text-xs text-gray-400">4 medications scheduled</p>
+          <p className="text-xs text-gray-400">
+            {medications.length} medication{medications.length !== 1 ? "s" : ""} active
+          </p>
         </div>
       </div>
-      <div className="space-y-3">
-        {medications.map((med, idx) => (
-          <div
-            key={idx}
-            className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-primary-50 transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <Clock className="w-4 h-4 text-gray-400" />
-              <div>
-                <span className="text-sm font-medium text-gray-700 block">
-                  {med.name}
-                </span>
-                <span className="text-xs text-gray-400">{med.time}</span>
+      {medications.length === 0 ? (
+        <p className="text-sm text-gray-400 text-center py-4">No active medications</p>
+      ) : (
+        <div className="space-y-3">
+          {medications.map((med) => {
+            const taken = isTakenToday(med.id);
+            return (
+              <div
+                key={med.id}
+                className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-primary-50 transition-colors cursor-pointer"
+                onClick={() => handleToggle(med)}
+              >
+                <div className="flex items-center gap-3">
+                  <Clock className="w-4 h-4 text-gray-400" />
+                  <div>
+                    <span className="text-sm font-medium text-gray-700 block">
+                      {med.name} — {med.dosage}
+                    </span>
+                    <span className="text-xs text-gray-400">{med.frequency}</span>
+                  </div>
+                </div>
+                {loggingId === med.id ? (
+                  <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                ) : taken ? (
+                  <CheckCircle2 className="w-5 h-5 text-primary" />
+                ) : (
+                  <div className="w-5 h-5 rounded-full border-2 border-gray-300" />
+                )}
               </div>
-            </div>
-            {med.taken ? (
-              <CheckCircle2 className="w-5 h-5 text-primary" />
-            ) : (
-              <div className="w-5 h-5 rounded-full border-2 border-gray-300" />
-            )}
-          </div>
-        ))}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </motion.div>
   );
 }
 
 function HealthDataCard() {
+  const { patientId } = useAuth();
+  const [biometrics, setBiometrics] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!patientId) return;
+    biometricService
+      .getRecentBiometrics(patientId, 7)
+      .then((data) => setBiometrics(Array.isArray(data) ? data : []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [patientId]);
+
+  // Get latest value for each type
+  const latest = {};
+  biometrics.forEach((b) => {
+    if (!latest[b.type] || new Date(b.timestamp) > new Date(latest[b.type].timestamp)) {
+      latest[b.type] = b;
+    }
+  });
+
+  // Build chart data from biometrics grouped by day
+  const dayMap = {};
+  biometrics.forEach((b) => {
+    const day = new Date(b.timestamp).toLocaleDateString("en", { weekday: "short" });
+    if (!dayMap[day]) dayMap[day] = { name: day };
+    if (b.type === "bp") {
+      const systolic = parseInt(b.value) || parseInt(b.value?.split("/")[0]);
+      dayMap[day].bp = systolic;
+    }
+    if (b.type === "heart_rate") dayMap[day].hr = parseFloat(b.value);
+    if (b.type === "temperature") dayMap[day].temp = parseFloat(b.value);
+  });
+  const chartData = Object.values(dayMap);
+
+  const quickStats = [
+    {
+      icon: HeartPulse,
+      label: "BP",
+      value: latest.bp?.value || "—",
+      color: "text-rose-500",
+    },
+    {
+      icon: Thermometer,
+      label: "Temp",
+      value: latest.temperature ? `${latest.temperature.value}°F` : "—",
+      color: "text-amber-500",
+    },
+    {
+      icon: Droplets,
+      label: "SpO2",
+      value: latest.spo2 ? `${latest.spo2.value}%` : "—",
+      color: "text-blue-500",
+    },
+  ];
+
+  if (loading) {
+    return (
+      <motion.div variants={fadeUp} custom={2} className="card p-5 flex items-center justify-center min-h-[200px]">
+        <Loader2 className="w-6 h-6 text-primary animate-spin" />
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div variants={fadeUp} custom={2} className="card p-5">
       <div className="flex items-center gap-3 mb-4">
@@ -108,11 +238,7 @@ function HealthDataCard() {
 
       {/* Quick Stats */}
       <div className="grid grid-cols-3 gap-3 mb-4">
-        {[
-          { icon: HeartPulse, label: "BP", value: "120/80", color: "text-rose-500" },
-          { icon: Thermometer, label: "Temp", value: "98.6°F", color: "text-amber-500" },
-          { icon: Droplets, label: "SpO2", value: "97%", color: "text-blue-500" },
-        ].map((stat) => (
+        {quickStats.map((stat) => (
           <div key={stat.label} className="text-center p-2 bg-gray-50 rounded-xl">
             <stat.icon className={`w-4 h-4 mx-auto mb-1 ${stat.color}`} />
             <div className="text-sm font-bold text-gray-900">{stat.value}</div>
@@ -123,187 +249,148 @@ function HealthDataCard() {
 
       {/* Chart */}
       <div className="h-40">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-            <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke="#94a3b8" />
-            <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
-            <Tooltip
-              contentStyle={{
-                borderRadius: "12px",
-                border: "none",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-              }}
-            />
-            <Line
-              type="monotone"
-              dataKey="bp"
-              stroke="#16a34a"
-              strokeWidth={2}
-              dot={{ fill: "#16a34a", r: 3 }}
-              name="Blood Pressure"
-            />
-            <Line
-              type="monotone"
-              dataKey="hr"
-              stroke="#3b82f6"
-              strokeWidth={2}
-              dot={{ fill: "#3b82f6", r: 3 }}
-              name="Heart Rate"
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    </motion.div>
-  );
-}
-
-function MessagesSection() {
-  const recentConvos = [
-    {
-      doctor: "Dr. Amit Patel",
-      specialty: "Endocrinologist",
-      avatar: "AP",
-      preview: "Continue with Metformin. We'll review in 2 weeks.",
-      time: "10:40 AM",
-      unread: 0,
-      gradient: "from-emerald-400 to-teal-500",
-    },
-    {
-      doctor: "Dr. Sneha Reddy",
-      specialty: "Cardiologist",
-      avatar: "SR",
-      preview: "Your ECG report is attached. Please review.",
-      time: "Yesterday",
-      unread: 2,
-      gradient: "from-violet-400 to-purple-500",
-    },
-    {
-      doctor: "Dr. Ravi Kumar",
-      specialty: "General Physician",
-      avatar: "RK",
-      preview: "Your annual checkup is due next week.",
-      time: "Mon",
-      unread: 1,
-      gradient: "from-amber-400 to-orange-500",
-    },
-  ];
-
-  return (
-    <motion.div variants={fadeUp} custom={3} className="card p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center">
-            <MessageSquare className="w-5 h-5 text-white" />
+        {chartData.length > 0 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke="#94a3b8" />
+              <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
+              <Tooltip
+                contentStyle={{
+                  borderRadius: "12px",
+                  border: "none",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                }}
+              />
+              <Line type="monotone" dataKey="bp" stroke="#16a34a" strokeWidth={2} dot={{ fill: "#16a34a", r: 3 }} name="BP (systolic)" />
+              <Line type="monotone" dataKey="hr" stroke="#3b82f6" strokeWidth={2} dot={{ fill: "#3b82f6", r: 3 }} name="Heart Rate" />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex items-center justify-center h-full text-sm text-gray-400">
+            No biometric data yet. Log your first reading!
           </div>
-          <div>
-            <h3 className="font-semibold text-gray-900">Recent Messages</h3>
-            <p className="text-xs text-gray-400">3 conversations</p>
-          </div>
-        </div>
-        <Link
-          href="/patient/messages"
-          className="flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-dark transition-colors no-underline"
-        >
-          View All
-          <ArrowUpRight className="w-3.5 h-3.5" />
-        </Link>
-      </div>
-      <div className="space-y-2">
-        {recentConvos.map((convo, idx) => (
-          <Link
-            key={idx}
-            href="/patient/messages"
-            className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer no-underline group"
-          >
-            {/* Avatar */}
-            <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${convo.gradient} flex items-center justify-center flex-shrink-0 shadow-sm`}>
-              <span className="text-xs font-bold text-white">{convo.avatar}</span>
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-0.5">
-                <span className={`text-sm ${convo.unread > 0 ? "font-semibold text-gray-900" : "font-medium text-gray-700"}`}>
-                  {convo.doctor}
-                </span>
-                <span className={`text-[11px] flex-shrink-0 ml-2 ${convo.unread > 0 ? "text-primary font-semibold" : "text-gray-400"}`}>
-                  {convo.time}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <p className={`text-xs truncate ${convo.unread > 0 ? "text-gray-600 font-medium" : "text-gray-400"}`}>
-                  {convo.preview}
-                </p>
-                {convo.unread > 0 && (
-                  <span className="ml-2 flex-shrink-0 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
-                    <span className="text-[10px] font-bold text-white">{convo.unread}</span>
-                  </span>
-                )}
-              </div>
-            </div>
-          </Link>
-        ))}
+        )}
       </div>
     </motion.div>
   );
 }
 
 function HealthLogsSection() {
+  const { patientId } = useAuth();
+  const [symptoms, setSymptoms] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!patientId) return;
+    symptomService
+      .getRecentSymptoms(patientId, 7)
+      .then((data) => setSymptoms(Array.isArray(data) ? data : []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [patientId]);
+
+  const severityStatus = (s) => {
+    if (s >= 7) return { color: "text-danger", bg: "bg-red-50", label: "Severe" };
+    if (s >= 4) return { color: "text-warning", bg: "bg-amber-50", label: "Moderate" };
+    return { color: "text-primary", bg: "bg-primary-50", label: "Mild" };
+  };
+
+  if (loading) {
+    return (
+      <motion.div variants={fadeUp} custom={4} className="card p-5 flex items-center justify-center min-h-[160px]">
+        <Loader2 className="w-5 h-5 text-primary animate-spin" />
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div variants={fadeUp} custom={4} className="card p-5">
-      <h3 className="font-semibold text-gray-900 mb-4">Health Logs</h3>
-      <div className="space-y-2">
-        {healthLogs.slice(0, 4).map((log, idx) => (
-          <div
-            key={idx}
-            className="flex items-center justify-between p-3 bg-gray-50 rounded-xl"
-          >
-            <div className="flex items-center gap-3">
-              <div
-                className={`w-2 h-2 rounded-full ${
-                  log.status === "normal" ? "bg-primary" : "bg-warning"
-                }`}
-              />
-              <div>
-                <span className="text-sm font-medium text-gray-700">
-                  {log.type}
+      <h3 className="font-semibold text-gray-900 mb-4">Recent Symptoms</h3>
+      {symptoms.length === 0 ? (
+        <p className="text-sm text-gray-400 text-center py-4">No recent symptoms logged</p>
+      ) : (
+        <div className="space-y-2">
+          {symptoms.slice(0, 5).map((s) => {
+            const status = severityStatus(s.severity);
+            return (
+              <div key={s.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className={`w-2 h-2 rounded-full ${status.color === "text-primary" ? "bg-primary" : status.color === "text-warning" ? "bg-warning" : "bg-danger"}`} />
+                  <div>
+                    <span className="text-sm font-medium text-gray-700 block truncate max-w-[200px]">
+                      {s.description}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      {new Date(s.date || s.created_at).toLocaleDateString()} · via {s.source}
+                    </span>
+                  </div>
+                </div>
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${status.bg} ${status.color}`}>
+                  {status.label} ({s.severity}/10)
                 </span>
-                <span className="text-xs text-gray-400 block">{log.date}</span>
               </div>
-            </div>
-            <span
-              className={`text-sm font-semibold ${
-                log.status === "normal" ? "text-primary" : "text-warning"
-              }`}
-            >
-              {log.value}
-            </span>
-          </div>
-        ))}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </motion.div>
   );
 }
 
 function AiPanel() {
-  const [messages, setMessages] = useState(aiMessages);
+  const { patientId } = useAuth();
+  const [messages, setMessages] = useState([
+    {
+      role: "assistant",
+      content: "Hello! I'm your AI health assistant. Ask me about your symptoms, medications, or health status. I'll analyze them using real medical AI.",
+    },
+  ]);
   const [input, setInput] = useState("");
+  const [thinking, setThinking] = useState(false);
+  const chatEndRef = useRef(null);
 
-  const handleSend = () => {
-    if (!input.trim()) return;
-    setMessages([...messages, { role: "user", content: input }]);
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleSend = async () => {
+    if (!input.trim() || thinking) return;
+    const userMsg = input.trim();
     setInput("");
-    setTimeout(() => {
+    setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
+    setThinking(true);
+
+    try {
+      const result = await aiService.analyzeSymptoms(userMsg, patientId);
+      let reply = "";
+      if (typeof result === "string") {
+        reply = result;
+      } else if (result?.analysis) {
+        const a = result.analysis;
+        if (typeof a === "string") {
+          reply = a;
+        } else {
+          // Format structured analysis
+          const parts = [];
+          if (a.assessment) parts.push(`**Assessment:** ${a.assessment}`);
+          if (a.possible_conditions?.length) parts.push(`**Possible Conditions:** ${a.possible_conditions.join(", ")}`);
+          if (a.severity_assessment) parts.push(`**Severity:** ${a.severity_assessment}`);
+          if (a.recommendations?.length) parts.push(`**Recommendations:**\n${a.recommendations.map((r) => `• ${r}`).join("\n")}`);
+          if (a.urgency) parts.push(`**Urgency:** ${a.urgency}`);
+          reply = parts.length > 0 ? parts.join("\n\n") : JSON.stringify(a, null, 2);
+        }
+      } else {
+        reply = typeof result === "object" ? JSON.stringify(result, null, 2) : String(result);
+      }
+      setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+    } catch (err) {
       setMessages((prev) => [
         ...prev,
-        {
-          role: "assistant",
-          content:
-            "Thank you for sharing that. Based on your symptoms, I recommend monitoring your condition closely. Would you like me to notify your doctor?",
-        },
+        { role: "assistant", content: `Sorry, I couldn't process that. Error: ${err.message}` },
       ]);
-    }, 1000);
+    }
+    setThinking(false);
   };
 
   return (
@@ -323,7 +410,7 @@ function AiPanel() {
             <h3 className="font-semibold text-gray-900">Ask AI</h3>
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full bg-primary pulse-green" />
-              <span className="text-xs text-gray-400">Available</span>
+              <span className="text-xs text-gray-400">Connected to AI Backend</span>
             </div>
           </div>
         </div>
@@ -360,6 +447,21 @@ function AiPanel() {
             </div>
           </div>
         ))}
+        {thinking && (
+          <div className="flex gap-2.5">
+            <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 bg-primary-100 text-primary">
+              <Bot className="w-3.5 h-3.5" />
+            </div>
+            <div className="bg-gray-50 p-3 rounded-2xl rounded-tl-sm">
+              <div className="flex gap-1">
+                <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+              </div>
+            </div>
+          </div>
+        )}
+        <div ref={chatEndRef} />
       </div>
 
       {/* Input */}
@@ -370,20 +472,18 @@ function AiPanel() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            placeholder="Ask about your health..."
-            className="flex-1 px-4 py-2.5 bg-gray-50 rounded-xl text-sm border border-border focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
+            placeholder="Describe your symptoms..."
+            disabled={thinking}
+            className="flex-1 px-4 py-2.5 bg-gray-50 rounded-xl text-sm border border-border focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all disabled:opacity-50"
           />
           <button
             onClick={handleSend}
-            className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center hover:bg-primary-dark transition-colors"
+            disabled={thinking}
+            className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center hover:bg-primary-dark transition-colors disabled:opacity-50"
           >
             <Send className="w-4 h-4 text-white" />
           </button>
         </div>
-        <button className="w-full mt-3 flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-primary-50 to-primary-100 text-primary rounded-xl font-medium text-sm hover:from-primary-100 hover:to-primary-200 transition-all">
-          <Mic className="w-5 h-5" />
-          Voice Input
-        </button>
       </div>
     </motion.div>
   );
@@ -403,8 +503,7 @@ export default function PatientDashboard() {
           <MedicationCard />
           <HealthDataCard />
         </div>
-        <div className="grid lg:grid-cols-2 gap-6">
-          <MessagesSection />
+        <div className="grid lg:grid-cols-1 gap-6">
           <HealthLogsSection />
         </div>
       </motion.div>

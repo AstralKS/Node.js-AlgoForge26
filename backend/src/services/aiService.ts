@@ -69,7 +69,7 @@ async function makeRequest(
     throw new Error(`OpenRouter ${response.status}: ${errorBody}`);
   }
 
-  const data = await response.json();
+  const data = await response.json() as any;
   logger.info(`OpenRouter response received, choices: ${data.choices?.length || 0}`);
 
   const content = data.choices?.[0]?.message?.content;

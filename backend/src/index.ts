@@ -14,6 +14,7 @@ import biometricRoutes from './routes/biometric.routes';
 import visitRoutes from './routes/visit.routes';
 import aiRoutes from './routes/ai.routes';
 import whatsappRoutes from './routes/whatsapp.routes';
+import messageRoutes from './routes/message.routes';
 
 const app = express();
 
@@ -39,6 +40,7 @@ app.use('/api/biometrics', biometricRoutes);
 app.use('/api/visits', visitRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
+app.use('/api/messages', messageRoutes);
 // Shortcut: Twilio can also hit /webhook directly
 app.use('/', whatsappRoutes);
 

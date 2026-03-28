@@ -7,8 +7,12 @@ import * as BiometricModel from '../models/Biometric';
 import * as MedLogModel from '../models/MedicationLog';
 import { notifyDoctor } from '../services/notificationService';
 import * as PatientModel from '../models/Patient';
+import * as MessageModel from '../models/Message';
 import { sendSuccess } from '../utils/response';
 import { logger } from '../utils/logger';
+
+// Sentinel user ID representing the WhatsApp AI bot
+const WHATSAPP_BOT_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 // ── AI Service availability check (shared with ai.controller) ──
 let _aiUp: boolean | null = null;
@@ -28,125 +32,172 @@ async function isAIServiceAvailable(): Promise<boolean> {
  * (intent → extract → analyze → misdiagnosis check → respond).
  */
 export async function handleIncoming(req: Request, res: Response, next: NextFunction) {
-  try {
-    const parsed = whatsappService.parseIncomingMessage(req.body);
-    logger.info(`📱 WhatsApp from ${parsed.from}: ${parsed.message.substring(0, 80)}...`);
+  // 1. Immediately acknowledge Twilio to avoid webhook timeouts (15s limit)
+  res.type('text/xml');
+  res.send('<Response></Response>');
 
-    const aiUp = await isAIServiceAvailable();
-    let result: any;
-
-    // Look up patient by WhatsApp number
-    let patientId: string | null = null;
+  // 2. Process heavy AI tasks asynchronously
+  (async () => {
     try {
-      const patients = await PatientModel.getPatientByWhatsApp(parsed.from);
-      if (patients) patientId = (patients as any).id;
-    } catch { /* no patient mapping yet */ }
+      const parsed = whatsappService.parseIncomingMessage(req.body);
+      logger.info(`📱 WhatsApp from ${parsed.from}: ${parsed.message.substring(0, 80)}...`);
 
-    if (aiUp && patientId) {
-      // ── Full AI pipeline via Python service ──
-      logger.info('🧠 Routing to Python AI Service for full WhatsApp pipeline');
+      const aiUp = await isAIServiceAvailable();
+      let result: any;
+
+      // Look up patient by WhatsApp number
+      let patientId: string | null = null;
+      let patientUserId: string | null = null;
       try {
-        const aiResult = await aiProxy.aiProcessWhatsApp(patientId, parsed.message, parsed.from);
+        const patients = await PatientModel.getPatientByWhatsApp(parsed.from);
+        if (patients) {
+          patientId = (patients as any).id;
+          patientUserId = (patients as any).user_id || null;
+        }
+      } catch { /* no patient mapping yet */ }
+
+      // Persist the incoming patient message to Supabase
+      if (patientUserId) {
+        try {
+          await MessageModel.createMessage({
+            sender_id: patientUserId,
+            receiver_id: WHATSAPP_BOT_USER_ID,
+            content: parsed.message,
+            read: true,
+          });
+        } catch (e: any) { logger.warn(`⚠️ Failed to save incoming WhatsApp message: ${e.message}`); }
+      }
+
+      if (aiUp && patientId) {
+        // ── Full AI pipeline via Python service ──
+        logger.info('🧠 Routing to Python AI Service for full WhatsApp pipeline');
+        try {
+          const aiResult = await aiProxy.aiProcessWhatsApp(patientId, parsed.message, parsed.from);
+          result = {
+            raw: parsed,
+            ai_processed: aiResult,
+            actions_taken: [],
+            source: 'ai-service',
+          };
+
+          // Auto-store data based on AI service results
+          if (aiResult.extracted_data) {
+            // Symptoms
+            const symptoms = aiResult.extracted_data.symptoms_found || aiResult.extracted_data.symptoms || [];
+            for (const s of symptoms) {
+              try {
+                await SymptomModel.createSymptom({
+                  patient_id: patientId,
+                  date: new Date().toISOString(),
+                  description: s.description || s.name || String(s),
+                  severity: s.severity || 5,
+                  source: 'whatsapp',
+                  ai_analysis: aiResult.analysis || null,
+                });
+                result.actions_taken.push(`Stored symptom: ${s.name || s.description}`);
+              } catch (e: any) { logger.warn(`Failed to store symptom: ${e.message}`); }
+            }
+
+            // Biometrics
+            const biometrics = aiResult.extracted_data.biometrics;
+            if (biometrics && typeof biometrics === 'object') {
+              const unitMap: Record<string, string> = {
+                temperature: '°F', blood_pressure: 'mmHg', bp: 'mmHg',
+                heart_rate: 'bpm', glucose: 'mg/dL', weight: 'kg', spo2: '%',
+              };
+              const entries = Array.isArray(biometrics)
+                ? biometrics
+                : Object.entries(biometrics).filter(([, v]) => v != null).map(([k, v]) => ({ type: k, value: String(v), unit: unitMap[k] || '' }));
+
+              for (const b of entries) {
+                try {
+                  await BiometricModel.createBiometric({
+                    patient_id: patientId,
+                    type: (b as any).type,
+                    value: String((b as any).value),
+                    unit: (b as any).unit || '',
+                    timestamp: new Date().toISOString(),
+                  });
+                  result.actions_taken.push(`Stored biometric: ${(b as any).type} = ${(b as any).value}`);
+                } catch (e: any) { logger.warn(`Failed to store biometric: ${e.message}`); }
+              }
+            }
+          }
+
+          // If urgent, notify doctor
+          if (aiResult.needs_doctor_attention || aiResult.urgency === 'critical') {
+            try {
+              const patient = await PatientModel.getPatientById(patientId);
+              if ((patient as any)?.assigned_doctor_id) {
+                await notifyDoctor(
+                  patientId,
+                  (patient as any).assigned_doctor_id,
+                  'critical',
+                  `Urgent WhatsApp message from patient: ${parsed.message.substring(0, 100)}`,
+                  JSON.stringify(aiResult.analysis || aiResult.risk_check || {})
+                );
+                result.actions_taken.push('doctor_notified');
+              }
+            } catch { /* ignore */ }
+          }
+        } catch (err: any) {
+          logger.warn(`⚠️ AI Service WhatsApp processing failed: ${err.message}`);
+          // Fall through to direct OpenRouter
+        }
+      }
+
+      if (!result) {
+        // ── Fallback: direct OpenRouter call ──
+        logger.info('🌐 Using direct OpenRouter for WhatsApp processing');
+        const formatted = await aiDirect.formatWhatsAppData(parsed.message);
         result = {
           raw: parsed,
-          ai_processed: aiResult,
+          ai_formatted: formatted,
           actions_taken: [],
-          source: 'ai-service',
+          source: 'direct-openrouter',
         };
 
-        // Auto-store data based on AI service results
-        if (aiResult.extracted_data) {
-          // Symptoms
-          const symptoms = aiResult.extracted_data.symptoms_found || aiResult.extracted_data.symptoms || [];
-          for (const s of symptoms) {
-            try {
-              await SymptomModel.createSymptom({
-                patient_id: patientId,
-                date: new Date().toISOString(),
-                description: s.description || s.name || String(s),
-                severity: s.severity || 5,
-                source: 'whatsapp',
-                ai_analysis: aiResult.analysis || null,
-              });
-              result.actions_taken.push(`Stored symptom: ${s.name || s.description}`);
-            } catch (e: any) { logger.warn(`Failed to store symptom: ${e.message}`); }
-          }
-
-          // Biometrics
-          const biometrics = aiResult.extracted_data.biometrics;
-          if (biometrics && typeof biometrics === 'object') {
-            const unitMap: Record<string, string> = {
-              temperature: '°F', blood_pressure: 'mmHg', bp: 'mmHg',
-              heart_rate: 'bpm', glucose: 'mg/dL', weight: 'kg', spo2: '%',
-            };
-            const entries = Array.isArray(biometrics)
-              ? biometrics
-              : Object.entries(biometrics).filter(([, v]) => v != null).map(([k, v]) => ({ type: k, value: String(v), unit: unitMap[k] || '' }));
-
-            for (const b of entries) {
-              try {
-                await BiometricModel.createBiometric({
-                  patient_id: patientId,
-                  type: (b as any).type,
-                  value: String((b as any).value),
-                  unit: (b as any).unit || '',
-                  timestamp: new Date().toISOString(),
-                });
-                result.actions_taken.push(`Stored biometric: ${(b as any).type} = ${(b as any).value}`);
-              } catch (e: any) { logger.warn(`Failed to store biometric: ${e.message}`); }
-            }
-          }
+        if (formatted.urgency === 'critical' || formatted.needs_doctor_attention) {
+          result.actions_taken.push('doctor_notified');
+          logger.warn(`🚨 Urgent message from ${parsed.from} — flagged for doctor`);
         }
+      }
 
-        // If urgent, notify doctor
-        if (aiResult.needs_doctor_attention || aiResult.urgency === 'critical') {
+      // Determine the AI's suggested reply
+      const suggestedReply: string | null =
+        result?.ai_processed?.suggested_reply ||
+        result?.ai_formatted?.suggested_reply ||
+        null;
+
+      // Persist the AI reply to Supabase and send it back via Twilio REST API
+      if (suggestedReply) {
+        if (patientUserId) {
           try {
-            const patient = await PatientModel.getPatientById(patientId);
-            if ((patient as any)?.assigned_doctor_id) {
-              await notifyDoctor(
-                patientId,
-                (patient as any).assigned_doctor_id,
-                'critical',
-                `Urgent WhatsApp message from patient: ${parsed.message.substring(0, 100)}`,
-                JSON.stringify(aiResult.analysis || aiResult.risk_check || {})
-              );
-              result.actions_taken.push('doctor_notified');
-            }
-          } catch { /* ignore */ }
+            await MessageModel.createMessage({
+              sender_id: WHATSAPP_BOT_USER_ID,
+              receiver_id: patientUserId,
+              content: suggestedReply,
+              read: false,
+            });
+          } catch (e: any) { logger.warn(`⚠️ Failed to save AI WhatsApp reply: ${e.message}`); }
         }
-      } catch (err: any) {
-        logger.warn(`⚠️ AI Service WhatsApp processing failed: ${err.message}`);
-        // Fall through to direct OpenRouter
+
+        // Delay slightly for natural feel, then send via REST API instead of TwiML
+        setTimeout(async () => {
+          try {
+            await whatsappService.sendWhatsAppMessage(parsed.from, suggestedReply);
+            logger.info('✅ WhatsApp reply sent to patient via Twilio REST API');
+          } catch (e: any) {
+            logger.error(`❌ Failed to push WhatsApp reply onto Twilio: ${e.message}`);
+          }
+        }, 500);
       }
+
+      logger.info('WhatsApp processed:', JSON.stringify(result, null, 2));
+    } catch (err) {
+      logger.error('WhatsApp async background processing error:', err);
     }
-
-    if (!result) {
-      // ── Fallback: direct OpenRouter call ──
-      logger.info('🌐 Using direct OpenRouter for WhatsApp processing');
-      const formatted = await aiDirect.formatWhatsAppData(parsed.message);
-      result = {
-        raw: parsed,
-        ai_formatted: formatted,
-        actions_taken: [],
-        source: 'direct-openrouter',
-      };
-
-      if (formatted.urgency === 'critical' || formatted.needs_doctor_attention) {
-        result.actions_taken.push('doctor_notified');
-        logger.warn(`🚨 Urgent message from ${parsed.from} — flagged for doctor`);
-      }
-    }
-
-    // Respond to Twilio with TwiML
-    res.type('text/xml');
-    res.send('<Response></Response>');
-
-    logger.info('WhatsApp processed:', JSON.stringify(result, null, 2));
-  } catch (err) {
-    logger.error('WhatsApp webhook error:', err);
-    res.type('text/xml');
-    res.send('<Response></Response>');
-  }
+  })();
 }
 
 /**
