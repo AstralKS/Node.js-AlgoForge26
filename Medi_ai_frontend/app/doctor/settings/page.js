@@ -224,21 +224,21 @@ export default function DoctorSettingsPage() {
         </h2>
         <div className="space-y-4">
           {[
+            // {
+            //   key: "emailNotifications",
+            //   label: "Email Notifications",
+            //   desc: "Receive patient updates via email",
+            // },
             {
-              key: "emailNotifications",
-              label: "Email Notifications",
-              desc: "Receive patient updates via email",
+              key: "whatsappAlerts",
+              label: "WhatsApp Alerts",
+              desc: "Get critical alerts via WhatsApp",
             },
-            {
-              key: "smsAlerts",
-              label: "SMS Alerts",
-              desc: "Get critical alerts via SMS",
-            },
-            {
-              key: "autoSchedule",
-              label: "Auto-schedule Follow-ups",
-              desc: "Automatically suggest follow-up appointment slots",
-            },
+            // {
+            //   key: "AI-insights",
+            //   label: "AI Insights",
+            //   desc: "Get intelligent recommendations for patient care",
+            // },
           ].map((item) => (
             <div
               key={item.key}
@@ -267,7 +267,7 @@ export default function DoctorSettingsPage() {
         </div>
       </motion.div>
 
-      {/* Security */}
+      {/* Security
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -308,10 +308,10 @@ export default function DoctorSettingsPage() {
             </div>
           </button>
         </div>
-      </motion.div>
+      </motion.div> */}
 
       {/* Save Button */}
-      <motion.div
+      {/* <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.5 }}
@@ -320,7 +320,7 @@ export default function DoctorSettingsPage() {
           <Save className="w-4 h-4" />
           Save Changes
         </button>
-      </motion.div>
+      </motion.div> */}
     </div>
   );
 }

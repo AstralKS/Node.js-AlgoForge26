@@ -128,7 +128,7 @@ function HeroSection() {
             </Link>
           </motion.div>
 
-          {/* Stats */}
+          {/* Stats
           <motion.div
             variants={fadeUp}
             custom={4}
@@ -144,7 +144,7 @@ function HeroSection() {
                 <div className="text-sm text-gray-500">{stat.label}</div>
               </div>
             ))}
-          </motion.div>
+          </motion.div> */}
         </motion.div>
       </div>
     </section>
@@ -308,7 +308,7 @@ function AboutSection() {
             </motion.div>
           </motion.div>
 
-          <motion.div variants={fadeUp} className="relative">
+          {/* <motion.div variants={fadeUp} className="relative">
             <div className="card-static p-8 relative z-10">
               <div className="space-y-4">
                 {[
@@ -331,7 +331,7 @@ function AboutSection() {
               </div>
             </div>
             <div className="absolute -top-4 -right-4 w-full h-full bg-gradient-to-br from-primary-100 to-primary-200 rounded-2xl -z-1" />
-          </motion.div>
+          </motion.div> */}
         </motion.div>
       </div>
     </section>
