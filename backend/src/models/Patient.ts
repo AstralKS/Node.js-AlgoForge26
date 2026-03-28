@@ -68,6 +68,18 @@ export async function getPatientsByDoctor(doctorId: string) {
   return data;
 }
 
+export async function getPatientByWhatsApp(whatsappNumber: string) {
+  // Normalize: strip 'whatsapp:' prefix if present
+  const normalized = whatsappNumber.replace('whatsapp:', '');
+  const { data, error } = await supabaseAdmin
+    .from(TABLE)
+    .select('*, users!patients_user_id_fkey(*)')
+    .eq('whatsapp_number', normalized)
+    .single();
+  if (error && error.code !== 'PGRST116') throw error;
+  return data;
+}
+
 export async function updatePatient(id: string, updates: Partial<PatientInsert>) {
   const { data, error } = await supabaseAdmin
     .from(TABLE)

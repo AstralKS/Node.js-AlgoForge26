@@ -1,6 +1,31 @@
 const API = '';
 let currentPatientId = null;
 
+async function checkAIService() {
+  const badge = document.getElementById('ai-status-badge');
+  if (!badge) return;
+  badge.textContent = '🧠 Checking...';
+  badge.style.background = '#333';
+  badge.style.color = '#888';
+  try {
+    const r = await fetch(`${API}/api/ai/service-status`);
+    const d = await r.json();
+    if (d.ai_service?.status === 'connected') {
+      badge.textContent = '🧠 AI Service ✅';
+      badge.style.background = '#0d3320';
+      badge.style.color = '#4ade80';
+    } else {
+      badge.textContent = '🧠 AI Offline ⚠️';
+      badge.style.background = '#3b2308';
+      badge.style.color = '#fbbf24';
+    }
+  } catch {
+    badge.textContent = '🧠 AI Error ❌';
+    badge.style.background = '#3b0808';
+    badge.style.color = '#f87171';
+  }
+}
+
 async function init() {
   try {
     const res = await fetch(`${API}/api/auth/users?role=patient`);
@@ -10,7 +35,7 @@ async function init() {
       document.getElementById('patient-name').textContent = user.name;
       const pRes = await fetch(`${API}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: user.email, role: 'patient' }) });
       const pData = await pRes.json();
-      if (pData.success && pData.data.profile) { currentPatientId = pData.data.profile.id; loadAllData(); }
+      if (pData.success && pData.data.profile) { currentPatientId = pData.data.profile.id; loadAllData(); checkAIService(); }
     } else { document.getElementById('patient-name').textContent = 'No patients — seed data first'; }
   } catch { document.getElementById('patient-name').textContent = 'Server offline'; }
 }
@@ -105,8 +130,30 @@ function loadSample(i) {
 
 async function simulateWA() {
   const msg = document.getElementById('wa-message').value; if (!msg) return toast('Enter message', 'error');
-  document.getElementById('wa-response').innerHTML = '<div style="text-align:center"><div class="spinner"></div><p>Processing...</p></div>';
-  try { const r = await fetch(`${API}/api/whatsapp/simulate`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message:msg,patient_id:currentPatientId})}); const d = await r.json(); document.getElementById('wa-response').innerHTML = `<h3>📱 Result</h3><pre class="json-output">${JSON.stringify(d,null,2)}</pre>`; loadAllData(); } catch (e) { document.getElementById('wa-response').innerHTML = `<h3>❌ Error</h3><p>${e.message}</p>`; }
+  document.getElementById('wa-response').innerHTML = '<div style="text-align:center"><div class="spinner"></div><p>Processing via AI pipeline...</p></div>';
+  try {
+    const r = await fetch(`${API}/api/whatsapp/simulate`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message:msg,patient_id:currentPatientId})});
+    const d = await r.json();
+    const data = d.data || d;
+
+    let html = '<div>';
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h3>📱 WhatsApp Processing Result</h3><span style="font-size:11px;padding:3px 8px;border-radius:8px;background:${data.source==='ai-service'?'#0d3320':'#3b2308'};color:${data.source==='ai-service'?'#4ade80':'#fbbf24'}">${data.source==='ai-service'?'🧠 Full AI Pipeline':'🌐 OpenRouter Fallback'}</span></div>`;
+
+    if (data.intent) {
+      html += `<div style="margin-bottom:12px;padding:10px;background:rgba(99,102,241,0.1);border-radius:8px"><strong>Intent:</strong> ${data.intent} ${data.urgency ? `<span style="color:${data.urgency==='critical'?'#f87171':data.urgency==='high'?'#fbbf24':'#4ade80'}">(${data.urgency})</span>` : ''}</div>`;
+    }
+    if (data.suggested_reply) {
+      html += `<div style="margin-bottom:12px;padding:10px;background:rgba(16,185,129,0.1);border-radius:8px"><strong>💬 Suggested Reply:</strong><br/>${data.suggested_reply}</div>`;
+    }
+    if (data.actions_taken?.length) {
+      html += `<div style="margin-bottom:12px;padding:10px;background:rgba(245,158,11,0.1);border-radius:8px"><strong>Actions:</strong><ul style="margin:4px 0 0 16px">${data.actions_taken.map(a => `<li>${a}</li>`).join('')}</ul></div>`;
+    }
+    html += `<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px;color:var(--accent-primary)">📋 Full JSON Response</summary><pre class="json-output" style="margin-top:8px">${JSON.stringify(d,null,2)}</pre></details>`;
+    html += '</div>';
+
+    document.getElementById('wa-response').innerHTML = html;
+    loadAllData();
+  } catch (e) { document.getElementById('wa-response').innerHTML = `<h3>❌ Error</h3><p>${e.message}</p>`; }
 }
 
 function toast(msg, type='info') { const el = document.createElement('div'); el.className = `toast ${type}`; el.textContent = msg; document.body.appendChild(el); setTimeout(() => el.remove(), 3000); }

@@ -26,3 +26,9 @@ ngrok.yml
 
 # Test files
 test.mjs
+verify_supabase.py
+
+# Python
+__pycache__/
+*.pyc
+*.pyo

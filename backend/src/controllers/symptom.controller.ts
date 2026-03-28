@@ -1,8 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as SymptomModel from '../models/Symptom';
-import * as aiService from '../services/aiService';
+import * as aiDirect from '../services/aiService';
+import * as aiProxy from '../services/aiServiceProxy';
 import { sendSuccess, sendCreated, sendError } from '../utils/response';
+import { logger } from '../utils/logger';
 
 // ── Schemas ──────────────────────────────────────────────
 export const createSymptomSchema = z.object({
@@ -13,6 +15,18 @@ export const createSymptomSchema = z.object({
   run_ai_analysis: z.boolean().default(true),
 });
 
+// ── AI check ─────────────────────────────────────────────
+let _aiUp: boolean | null = null;
+let _aiCheckedAt = 0;
+
+async function isAIServiceAvailable(): Promise<boolean> {
+  const now = Date.now();
+  if (_aiUp !== null && now - _aiCheckedAt < 30_000) return _aiUp;
+  try { _aiUp = await aiProxy.checkAIServiceHealth(); } catch { _aiUp = false; }
+  _aiCheckedAt = now;
+  return _aiUp;
+}
+
 // ── Controllers ──────────────────────────────────────────
 
 export async function createSymptom(req: Request, res: Response, next: NextFunction) {
@@ -21,11 +35,27 @@ export async function createSymptom(req: Request, res: Response, next: NextFunct
 
     let aiAnalysis = null;
     if (run_ai_analysis) {
-      try {
-        aiAnalysis = await aiService.analyzeSymptoms(description);
-      } catch (err: any) {
-        // Don't fail the symptom creation if AI fails
-        aiAnalysis = { error: err.message, status: 'ai_unavailable' };
+      const aiUp = await isAIServiceAvailable();
+
+      if (aiUp) {
+        // Primary: Python AI Service
+        try {
+          logger.info('🧠 Using Python AI Service for symptom analysis');
+          const result = await aiProxy.aiAnalyzeSymptoms(patient_id, description);
+          aiAnalysis = result?.analysis || result;
+        } catch (err: any) {
+          logger.warn(`⚠️ AI Service failed, falling back: ${err.message}`);
+        }
+      }
+
+      if (!aiAnalysis) {
+        // Fallback: direct OpenRouter
+        try {
+          logger.info('🌐 Using direct OpenRouter for symptom analysis');
+          aiAnalysis = await aiDirect.analyzeSymptoms(description);
+        } catch (err: any) {
+          aiAnalysis = { error: err.message, status: 'ai_unavailable' };
+        }
       }
     }
 

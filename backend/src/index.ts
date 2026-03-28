@@ -4,6 +4,7 @@ import path from 'path';
 import { env } from './config/env';
 import { logger } from './utils/logger';
 import { errorHandler, notFound } from './middleware/errorHandler';
+import { checkAIServiceHealth } from './services/aiServiceProxy';
 
 // Routes
 import patientRoutes from './routes/patient.routes';
@@ -42,13 +43,48 @@ app.use('/api/whatsapp', whatsappRoutes);
 app.use('/', whatsappRoutes);
 
 // ── Health check ─────────────────────────────────────────
-app.get('/api/health', (_req, res) => {
+app.get('/api/health', async (_req, res) => {
+  let aiServiceUp = false;
+  try {
+    aiServiceUp = await checkAIServiceHealth();
+  } catch { /* ignore */ }
+
   res.json({
     status: 'ok',
     service: 'mediai-backend',
     timestamp: new Date().toISOString(),
     env: env.NODE_ENV,
+    ai_service: {
+      url: env.AI_SERVICE_URL,
+      status: aiServiceUp ? 'connected' : 'disconnected',
+      note: aiServiceUp
+        ? 'Python AI Service is online — using full pipeline'
+        : 'Python AI Service offline — using direct OpenRouter fallback',
+    },
   });
+});
+
+// ── AI Service connectivity check ────────────────────────
+app.get('/api/ai/service-status', async (_req, res) => {
+  try {
+    const isUp = await checkAIServiceHealth();
+    res.json({
+      success: true,
+      ai_service: {
+        url: env.AI_SERVICE_URL,
+        status: isUp ? 'connected' : 'disconnected',
+      },
+    });
+  } catch (err: any) {
+    res.json({
+      success: false,
+      ai_service: {
+        url: env.AI_SERVICE_URL,
+        status: 'error',
+        error: err.message,
+      },
+    });
+  }
 });
 
 // ── Sample data endpoint (for seeding) ────────────────────
@@ -108,15 +144,25 @@ app.use(errorHandler);
 // ── Start server ─────────────────────────────────────────
 const PORT = parseInt(env.PORT);
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
+  // Check AI Service connectivity on startup
+  let aiStatus = '❌ disconnected (will use direct OpenRouter fallback)';
+  try {
+    const isUp = await checkAIServiceHealth();
+    if (isUp) {
+      aiStatus = `✅ connected at ${env.AI_SERVICE_URL}`;
+    }
+  } catch { /* ignore */ }
+
   logger.info(`
 ╔══════════════════════════════════════════════════╗
-║            🏥 MediAI Backend v1.0               ║
+║            🏥 MediAI Backend v1.1               ║
 ║──────────────────────────────────────────────────║
-║  Server:    http://localhost:${PORT}               ║
-║  Temp UI:   http://localhost:${PORT}               ║
-║  Health:    http://localhost:${PORT}/api/health     ║
-║  Env:       ${env.NODE_ENV}                        ║
+║  Server:      http://localhost:${PORT}               ║
+║  Temp UI:     http://localhost:${PORT}               ║
+║  Health:      http://localhost:${PORT}/api/health     ║
+║  AI Service:  ${aiStatus.substring(0, 36).padEnd(36)}║
+║  Env:         ${env.NODE_ENV.padEnd(36)}║
 ╚══════════════════════════════════════════════════╝
   `);
 });
