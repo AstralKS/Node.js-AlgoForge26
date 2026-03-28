@@ -1,0 +1,7 @@
+websockets
+websocket-client
+pyaudio
+python-dotenv
+numpy
+transformers
+torch

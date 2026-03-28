@@ -1,0 +1,15 @@
+====================================================
+        SOAP CLINICAL NOTE
+====================================================
+S — Subjective (Patient Reports):
+  • Symptoms reported: chest pain, nausea, fever
+  • Duration: 3 days
+O — Objective (Clinician Findings):
+  • Clinician notes: Are you experiencing chest pain? Any fever or nausea? I'll prescribe paracetamol 500mg and aspirin 100mg.
+A — Assessment:
+  • Presenting with: chest pain, nausea, fever
+  • Further evaluation required for definitive diagnosis
+P — Plan:
+  • Prescribe paracetamol 500mg for 3 days
+  • Prescribe aspirin 100mg
+====================================================

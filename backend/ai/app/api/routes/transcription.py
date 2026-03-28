@@ -2,42 +2,43 @@ import tempfile
 import os
 from fastapi import APIRouter, File, UploadFile, HTTPException
 
-# (Assuming Whisper Handler is recreated here or imported. To keep logic bulletproof, we use simple mock if not loaded)
-# In production, we assume `from app.modules.transcription.whisper_handler import WhisperHandler` is working.
-try:
-    from app.modules.transcription.whisper_handler import WhisperHandler
-    whisper_handler = WhisperHandler()
-except Exception:
-    class MockWhisper:
-        def transcribe_audio(self, p):
-            return {"language": "en", "text": "Patient comes in complaining about mild fever and cephalalgia. Recommending paracetamol 500mg daily. Monitor for severe indications."}
-    whisper_handler = MockWhisper()
-
-from app.modules.transcription.report_translator import ReportTranslator
+from app.modules.transcription.file_transcriber import FileTranscriber
+from app.modules.transcription.soap import build_soap_note
+from app.modules.transcription.diarizer import label_roles
 
 router = APIRouter()
-translator = ReportTranslator()
+transcriber = FileTranscriber()
 
 @router.post("/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
     """
-    1. Takes physical recording between patient and doctor.
-    2. Transcribes via Whisper.
-    3. Feeds to OpenRouter AI to simplify jargons and format into friendly JSON recommendation log.
+    1. Uploads temporary .wav recording to AssemblyAI
+    2. Retrieves transcript with Speaker Diarization
+    3. Feeds utterances into Medical BERT to create SOAP clinical note.
     """
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
             tmp.write(await file.read())
             temp_path = tmp.name
 
-        whisper_output = whisper_handler.transcribe_audio(temp_path)
+        assembly_data = transcriber.transcribe(temp_path)
         
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
-        # Let the AI translate the jargon and formulate the JSON output dynamically!
-        raw_text = whisper_output["text"]
-        ai_patient_report = translator.translate_transcript(raw_text)
+        raw_text = assembly_data.get("text", "")
+        utterances = assembly_data.get("utterances", [])
+
+        if not utterances:
+            speaker_segments = [{"text": raw_text, "speaker": "UNKNOWN", "start": 0, "end": 0}]
+        else:
+            speaker_segments = utterances
+
+        # Determine who was Doctor / Patient based on our ML heuristic in label_roles
+        roles = label_roles(speaker_segments)
+        
+        # Build the BERT-powered Structured SOAP Note
+        ai_patient_report = build_soap_note(speaker_segments, roles)
 
         # Here you would typically save `ai_patient_report` directly to Supabase
         # for the patient to view it online later!
