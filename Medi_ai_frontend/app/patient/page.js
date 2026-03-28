@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
+import Link from "next/link";
 import {
   Pill,
   HeartPulse,
@@ -14,6 +15,9 @@ import {
   User,
   Activity,
   Droplets,
+  MessageSquare,
+  ArrowUpRight,
+  Stethoscope,
 } from "lucide-react";
 import {
   LineChart,
@@ -24,7 +28,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { medications, healthLogs, aiMessages, patientMessages, chartData } from "@/lib/data";
+import { medications, healthLogs, aiMessages, chartData } from "@/lib/data";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -155,45 +159,90 @@ function HealthDataCard() {
 }
 
 function MessagesSection() {
+  const recentConvos = [
+    {
+      doctor: "Dr. Amit Patel",
+      specialty: "Endocrinologist",
+      avatar: "AP",
+      preview: "Continue with Metformin. We'll review in 2 weeks.",
+      time: "10:40 AM",
+      unread: 0,
+      gradient: "from-emerald-400 to-teal-500",
+    },
+    {
+      doctor: "Dr. Sneha Reddy",
+      specialty: "Cardiologist",
+      avatar: "SR",
+      preview: "Your ECG report is attached. Please review.",
+      time: "Yesterday",
+      unread: 2,
+      gradient: "from-violet-400 to-purple-500",
+    },
+    {
+      doctor: "Dr. Ravi Kumar",
+      specialty: "General Physician",
+      avatar: "RK",
+      preview: "Your annual checkup is due next week.",
+      time: "Mon",
+      unread: 1,
+      gradient: "from-amber-400 to-orange-500",
+    },
+  ];
+
   return (
     <motion.div variants={fadeUp} custom={3} className="card p-5">
-      <h3 className="font-semibold text-gray-900 mb-4">Recent Messages</h3>
-      <div className="space-y-3">
-        {patientMessages.map((msg, idx) => (
-          <div
-            key={idx}
-            className={`flex gap-3 ${msg.isDoctor ? "" : "flex-row-reverse"}`}
-          >
-            <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                msg.isDoctor
-                  ? "bg-primary-100 text-primary"
-                  : "bg-gray-100 text-gray-600"
-              }`}
-            >
-              {msg.isDoctor ? (
-                <HeartPulse className="w-4 h-4" />
-              ) : (
-                <User className="w-4 h-4" />
-              )}
-            </div>
-            <div
-              className={`max-w-[80%] p-3 rounded-2xl text-sm ${
-                msg.isDoctor
-                  ? "bg-gray-50 text-gray-700 rounded-tl-sm"
-                  : "bg-primary text-white rounded-tr-sm"
-              }`}
-            >
-              <p>{msg.content}</p>
-              <span
-                className={`text-xs mt-1 block ${
-                  msg.isDoctor ? "text-gray-400" : "text-primary-200"
-                }`}
-              >
-                {msg.time}
-              </span>
-            </div>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center">
+            <MessageSquare className="w-5 h-5 text-white" />
           </div>
+          <div>
+            <h3 className="font-semibold text-gray-900">Recent Messages</h3>
+            <p className="text-xs text-gray-400">3 conversations</p>
+          </div>
+        </div>
+        <Link
+          href="/patient/messages"
+          className="flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-dark transition-colors no-underline"
+        >
+          View All
+          <ArrowUpRight className="w-3.5 h-3.5" />
+        </Link>
+      </div>
+      <div className="space-y-2">
+        {recentConvos.map((convo, idx) => (
+          <Link
+            key={idx}
+            href="/patient/messages"
+            className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer no-underline group"
+          >
+            {/* Avatar */}
+            <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${convo.gradient} flex items-center justify-center flex-shrink-0 shadow-sm`}>
+              <span className="text-xs font-bold text-white">{convo.avatar}</span>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-0.5">
+                <span className={`text-sm ${convo.unread > 0 ? "font-semibold text-gray-900" : "font-medium text-gray-700"}`}>
+                  {convo.doctor}
+                </span>
+                <span className={`text-[11px] flex-shrink-0 ml-2 ${convo.unread > 0 ? "text-primary font-semibold" : "text-gray-400"}`}>
+                  {convo.time}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <p className={`text-xs truncate ${convo.unread > 0 ? "text-gray-600 font-medium" : "text-gray-400"}`}>
+                  {convo.preview}
+                </p>
+                {convo.unread > 0 && (
+                  <span className="ml-2 flex-shrink-0 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
+                    <span className="text-[10px] font-bold text-white">{convo.unread}</span>
+                  </span>
+                )}
+              </div>
+            </div>
+          </Link>
         ))}
       </div>
     </motion.div>

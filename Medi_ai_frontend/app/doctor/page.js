@@ -84,7 +84,7 @@ export default function DoctorDashboard() {
         </motion.div>
 
         <div className="grid lg:grid-cols-2 gap-6">
-          {/* Recent Activity */}
+          {/* Recent Activity
           <motion.div variants={fadeUp} custom={2} className="card-static p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-gray-900">Recent Activity</h3>
@@ -115,7 +115,7 @@ export default function DoctorDashboard() {
                 </div>
               ))}
             </div>
-          </motion.div>
+          </motion.div> */}
 
           {/* Quick Patient List */}
           <motion.div variants={fadeUp} custom={3} className="card-static p-6">
