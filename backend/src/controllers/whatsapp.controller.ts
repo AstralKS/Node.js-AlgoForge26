@@ -163,11 +163,39 @@ export async function handleIncoming(req: Request, res: Response, next: NextFunc
         }
       }
 
-      // Determine the AI's suggested reply
-      const suggestedReply: string | null =
+      // Determine the AI's suggested reply — fallback to a generated acknowledgement if missing
+      let suggestedReply: string | null =
         result?.ai_processed?.suggested_reply ||
         result?.ai_formatted?.suggested_reply ||
         null;
+
+      // Build a fallback reply from extracted data when AI didn't provide one
+      if (!suggestedReply) {
+        const fmt = result?.ai_formatted;
+        if (fmt) {
+          const biometrics: any[] = fmt.extracted_data?.biometrics || [];
+          const symptoms: any[] = fmt.extracted_data?.symptoms || [];
+          const urgency: string = fmt.urgency || 'low';
+
+          const parts: string[] = ['✅ Got your message!'];
+
+          if (biometrics.length > 0) {
+            const readings = biometrics.map((b: any) => `${b.type}: ${b.value} ${b.unit || ''}`.trim()).join(', ');
+            parts.push(`I've recorded your readings (${readings}).`);
+          }
+          if (symptoms.length > 0) {
+            const names = symptoms.map((s: any) => s.name || s.description).join(', ');
+            parts.push(`Your symptom report (${names}) has been logged.`);
+          }
+          if (urgency === 'critical' || fmt.needs_doctor_attention) {
+            parts.push('⚠️ This has been flagged as urgent and forwarded to your doctor. If this is an emergency, please call 108 or go to the nearest hospital immediately.');
+          } else {
+            parts.push('Keep tracking your health — your care team can see your updates. 💙');
+          }
+
+          suggestedReply = parts.join(' ');
+        }
+      }
 
       // Persist the AI reply to Supabase and send it back via Twilio REST API
       if (suggestedReply) {
@@ -185,12 +213,14 @@ export async function handleIncoming(req: Request, res: Response, next: NextFunc
         // Delay slightly for natural feel, then send via REST API instead of TwiML
         setTimeout(async () => {
           try {
-            await whatsappService.sendWhatsAppMessage(parsed.from, suggestedReply);
-            logger.info('✅ WhatsApp reply sent to patient via Twilio REST API');
+            await whatsappService.sendWhatsAppMessage(parsed.from, suggestedReply!);
+            logger.info(`✅ WhatsApp reply sent to ${parsed.from}: ${suggestedReply!.substring(0, 80)}...`);
           } catch (e: any) {
             logger.error(`❌ Failed to push WhatsApp reply onto Twilio: ${e.message}`);
           }
         }, 500);
+      } else {
+        logger.warn(`⚠️ No reply generated for message from ${parsed.from} — patient not responded`);
       }
 
       logger.info('WhatsApp processed:', JSON.stringify(result, null, 2));

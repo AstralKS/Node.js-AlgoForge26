@@ -181,19 +181,30 @@ function HealthDataCard() {
     }
   });
 
-  // Build chart data from biometrics grouped by day
+  // Build chart data from biometrics grouped by calendar date (YYYY-MM-DD)
+  // Keying by full date prevents same-weekday readings from overwriting each other
   const dayMap = {};
   biometrics.forEach((b) => {
-    const day = new Date(b.timestamp).toLocaleDateString("en", { weekday: "short" });
-    if (!dayMap[day]) dayMap[day] = { name: day };
+    const dateObj = new Date(b.timestamp);
+    const dateKey = dateObj.toISOString().split("T")[0]; // e.g. "2025-03-22"
+    const label = dateObj.toLocaleDateString("en", { month: "short", day: "numeric" }); // e.g. "Mar 22"
+    if (!dayMap[dateKey]) dayMap[dateKey] = { name: label, _ts: dateObj.getTime() };
     if (b.type === "bp") {
-      const systolic = parseInt(b.value) || parseInt(b.value?.split("/")[0]);
-      dayMap[day].bp = systolic;
+      const parts = String(b.value).split("/");
+      const systolic = parseInt(parts[0]);
+      if (!isNaN(systolic)) dayMap[dateKey].bp = systolic;
     }
-    if (b.type === "heart_rate") dayMap[day].hr = parseFloat(b.value);
-    if (b.type === "temperature") dayMap[day].temp = parseFloat(b.value);
+    if (b.type === "heart_rate") {
+      const v = parseFloat(b.value);
+      if (!isNaN(v)) dayMap[dateKey].hr = v;
+    }
+    if (b.type === "temperature") {
+      const v = parseFloat(b.value);
+      if (!isNaN(v)) dayMap[dateKey].temp = v;
+    }
   });
-  const chartData = Object.values(dayMap);
+  // Sort oldest → newest so the line runs left-to-right in time order
+  const chartData = Object.values(dayMap).sort((a, b) => a._ts - b._ts);
 
   const quickStats = [
     {

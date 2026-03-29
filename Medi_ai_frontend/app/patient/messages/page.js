@@ -36,23 +36,43 @@ export default function PatientMessagesPage() {
       let reply = "";
       if (typeof result === "string") {
         reply = result;
-      } else if (result?.analysis) {
-        const a = result.analysis;
+      } else if (typeof result === "object") {
+        const a = result.analysis || result;
         if (typeof a === "string") {
           reply = a;
         } else {
           const parts = [];
-          if (a.assessment) parts.push(`**Assessment:** ${a.assessment}`);
+          
+          // AI Response Render
+          if (a.assessment || a.analysis_notes) parts.push(`**Assessment:** ${a.assessment || a.analysis_notes}`);
+          if (a.summary) parts.push(`**Summary:** ${a.summary}`);
           if (a.possible_conditions?.length) parts.push(`**Possible Conditions:** ${a.possible_conditions.join(", ")}`);
-          if (a.severity_assessment) parts.push(`**Severity:** ${a.severity_assessment}`);
-          if (a.recommendations?.length) parts.push(`**Recommendations:**\n${a.recommendations.map((r) => `• ${r}`).join("\n")}`);
-          if (a.urgency) parts.push(`**Urgency:** ${a.urgency}`);
+          
+          const severity = a.severity_assessment || a.overall_severity || a.risk_level;
+          if (severity) parts.push(`**Severity/Risk:** ${severity}`);
+          
+          const urgency = a.urgency || a.is_emergency || a.requires_urgent_attention;
+          if (urgency) parts.push(`**Urgency:** ${urgency}`);
+          
+          const recs = a.recommendations || a.recommended_actions;
+          if (recs?.length) parts.push(`**Recommendations:**\n${recs.map((r) => `• ${r}`).join("\n")}`);
+          
           if (a.follow_up) parts.push(`**Follow-up:** ${a.follow_up}`);
+          
+          // AI-Simulated ML Response Render
+          if (a.suggested_condition) {
+            parts.push(`**Suggested condition:** ${a.suggested_condition}`);
+          }
+          if (a.matched_symptoms?.length) {
+            parts.push(`**Matched symptoms:**\n${a.matched_symptoms.map((s) => `• ${s}`).join("\n")}`);
+          }
+
           reply = parts.length > 0 ? parts.join("\n\n") : JSON.stringify(a, null, 2);
         }
       } else {
-        reply = typeof result === "object" ? JSON.stringify(result, null, 2) : String(result);
+        reply = String(result);
       }
+      
       setMessages((prev) => [
         ...prev,
         {

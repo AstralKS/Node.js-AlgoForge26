@@ -49,7 +49,7 @@ async function makeRequest(
       { role: 'user', content: userMessage },
     ],
     temperature: 0.3,
-    max_tokens: 4096,
+    max_tokens: 8192,
   };
 
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -114,6 +114,7 @@ export async function analyzeSymptoms(rawText: string, patientHistory?: string) 
   const systemPrompt = `You are a medical AI assistant for MediAI. Analyze the patient's symptom description and return structured JSON.
 
 IMPORTANT: You are NOT diagnosing. You are extracting and structuring symptom data for a doctor to review.
+Additionally, simulate a Machine Learning semantic search response by providing a 'suggested_condition' and a 'matched_symptoms' list based on the user's input.
 
 Return JSON with this exact structure:
 {
@@ -126,11 +127,15 @@ Return JSON with this exact structure:
       "body_area": "string — affected area"
     }
   ],
+  "assessment": "string — brief clinical reasoning",
+  "possible_conditions": ["string"],
   "risk_indicators": ["string — any warning signs"],
   "risk_level": "low | medium | high | critical",
   "recommended_actions": ["string — suggested next steps"],
   "requires_urgent_attention": false,
-  "summary": "string — brief clinical summary"
+  "summary": "string — brief clinical summary",
+  "suggested_condition": "string — primary matching condition",
+  "matched_symptoms": ["string"]
 }`;
 
   const userMsg = patientHistory
@@ -144,7 +149,7 @@ Return JSON with this exact structure:
  * Format raw WhatsApp message into structured patient data
  */
 export async function formatWhatsAppData(rawMessage: string) {
-  const systemPrompt = `You are a medical data extraction AI. Parse the patient's WhatsApp message and extract structured health data.
+  const systemPrompt = `You are a medical data extraction AI for MediAI. Parse the patient's WhatsApp message, extract structured health data, and compose a warm reply to send back.
 
 Return JSON with this exact structure:
 {
@@ -157,7 +162,8 @@ Return JSON with this exact structure:
   "patient_mood": "string",
   "urgency": "low | medium | high | critical",
   "needs_doctor_attention": false,
-  "ai_notes": "string — any observations"
+  "ai_notes": "string — any observations",
+  "suggested_reply": "string — a warm, concise WhatsApp reply (2-4 sentences) acknowledging what was recorded, any key observations (e.g. abnormal values), and a next-step tip. Use plain text only, no markdown."
 }`;
 
   return await callOpenRouter(systemPrompt, rawMessage);
