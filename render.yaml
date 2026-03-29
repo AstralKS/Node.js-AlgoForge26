@@ -3,6 +3,7 @@ services:
   - type: web
     name: mediai-backend
     env: node
+    plan: free
     rootDir: backend
     buildCommand: npm install && npm run build
     startCommand: npm run start:prod
@@ -23,6 +24,7 @@ services:
   - type: web
     name: mediai-ai
     env: python
+    plan: free
     rootDir: backend/ai
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
