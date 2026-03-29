@@ -197,3 +197,28 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* ── Smooth scrollbar for report cards ─────────────── */
+.scrollbar-smooth::-webkit-scrollbar {
+  width: 5px;
+}
+
+.scrollbar-smooth::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 8px 0;
+}
+
+.scrollbar-smooth::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #c4b5fd, #a78bfa);
+  border-radius: 10px;
+}
+
+.scrollbar-smooth::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #a78bfa, #8b5cf6);
+}
+
+.scrollbar-smooth {
+  scrollbar-width: thin;
+  scrollbar-color: #c4b5fd transparent;
+  scroll-behavior: smooth;
+}

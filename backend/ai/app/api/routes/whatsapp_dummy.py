@@ -73,7 +73,7 @@ async def mock_whatsapp_inbound(payload: WhatsAppMessage):
                     }
                     # Map to the biometrics table type enum
                     type_map = {
-                        "temperature": "temperature", "blood_pressure": "bp",
+                        "temperature": "temperature", "blood_pressure": "bp", "bp": "bp",
                         "heart_rate": "heart_rate", "glucose": "glucose",
                         "weight": "weight", "spo2": "spo2"
                     }

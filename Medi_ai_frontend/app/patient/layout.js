@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   Loader2,
   AlertCircle,
+  BrainCircuit,
 } from "lucide-react";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 
@@ -21,6 +22,7 @@ const sidebarItems = [
   { icon: CalendarDays, label: "Visits", href: "/patient/visits" },
   { icon: MessageSquare, label: "Messages", href: "/patient/messages" },
   { icon: FileText, label: "Health Logs", href: "/patient/health-logs" },
+  { icon: BrainCircuit, label: "AI Analysis", href: "/patient/ai-analysis" },
   { icon: Settings, label: "Settings", href: "/patient/settings" },
 ];
 

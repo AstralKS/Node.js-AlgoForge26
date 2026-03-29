@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Pill,
   HeartPulse,
@@ -365,6 +365,251 @@ function HealthLogsSection() {
   );
 }
 
+function AIAnalysisSection() {
+  const [showModal, setShowModal] = useState(false);
+
+  const weeklyReports = [
+    {
+      id: 1,
+      date: "Week of March 16-22, 2026",
+      symptoms: ["Persistent headache", "Fatigue", "Mild dizziness"],
+      soap: {
+        subjective: "Headache 4/10, fatigue, morning dizziness. No fever. Sleep slightly improved.",
+        objective: "BP 128/82, HR 72, Temp 98.4°F. Mild dehydration. Neuro exam normal.",
+        assessment: "Tension headache from stress/dehydration. Orthostatic dizziness. Improving trend.",
+        plan: "1. Hydrate — 8 glasses/day\n2. Sleep 7-8 hrs/night\n3. Stress management (breathing, meditation)\n4. Follow up in 1 week if persists"
+      }
+    },
+    {
+      id: 2,
+      date: "Week of March 9-15, 2026",
+      symptoms: ["Joint pain in knees", "Back stiffness"],
+      soap: {
+        subjective: "Bilateral knee pain with standing. Morning back stiffness ~30 min. Improving with PT.",
+        objective: "BP 134/86, HR 68. Full ROM in spine. No knee swelling or tenderness. Gait normal.",
+        assessment: "Mild osteoarthritis + mechanical back pain. No inflammatory signs.",
+        plan: "1. Acetaminophen 500mg PRN\n2. Back stretches 15 min 2×/day\n3. Knee brace for prolonged standing\n4. PT referral if worsening"
+      }
+    },
+    {
+      id: 3,
+      date: "Week of March 2-8, 2026",
+      symptoms: ["Seasonal allergies", "Sore throat", "Congestion"],
+      soap: {
+        subjective: "Congestion, sore throat, itchy eyes — 5 days, progressive. No fever. Cetirizine partial relief.",
+        objective: "BP 126/80, HR 70, Temp 98.6°F. Pharyngeal erythema, edematous turbinates. Lungs clear.",
+        assessment: "Allergic rhinitis with secondary pharyngitis. URI unlikely (no fever, gradual onset).",
+        plan: "1. Switch to fexofenadine 180mg daily\n2. Add fluticasone nasal spray\n3. Saline irrigation 2×/day\n4. Return if fever or no improvement in 5 days"
+      }
+    }
+  ];
+
+  return (
+    <>
+      <motion.div variants={fadeUp} custom={3} className="card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center">
+              <Bot className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900">AI Health Analysis</h3>
+              <p className="text-xs text-gray-400">Weekly insights & recommendations</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowModal(true)}
+            className="btn-primary text-sm py-2 px-4"
+          >
+            View Reports
+          </button>
+        </div>
+        <div className="bg-gradient-to-r from-violet-50 to-purple-50 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mt-0.5">
+              <Activity className="w-4 h-4 text-violet-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-700 leading-relaxed">
+                <span className="font-medium text-violet-700">Weekly Summary:</span> Your health metrics show improvement in cardiovascular markers this week. Continue maintaining current medication schedule and sleep patterns.
+              </p>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      <AnimatePresence>
+        {showModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ type: "spring", duration: 0.5 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-gradient-to-r from-violet-600 to-purple-600 p-6 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                    <Bot className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-white">AI Health Analysis Reports</h2>
+                    <p className="text-violet-200 text-sm">Weekly SOAP reports with symptoms and recommendations</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="w-10 h-10 rounded-xl bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors"
+                >
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto" style={{ maxHeight: "calc(90vh - 100px)" }}>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                  {weeklyReports.slice(0, 2).map((report) => (
+                    <div key={report.id} className="card p-5 flex flex-col h-[420px]">
+                      <div className="flex items-center gap-3 mb-4 shrink-0">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center">
+                          <CalendarDays className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900">{report.date}</h3>
+                          <p className="text-xs text-gray-400">AI-Generated Report</p>
+                        </div>
+                      </div>
+
+                      <div className="mb-4 shrink-0">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                          Reported Symptoms
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          {report.symptoms.map((symptom, idx) => (
+                            <span key={idx} className="px-3 py-1 bg-amber-50 text-amber-700 text-xs font-medium rounded-full border border-amber-200">
+                              {symptom}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+                        <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100">
+                          <h4 className="text-xs font-bold text-emerald-700 mb-1 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            Subjective
+                          </h4>
+                          <p className="text-sm text-gray-700 leading-relaxed">{report.soap.subjective}</p>
+                        </div>
+
+                        <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
+                          <h4 className="text-xs font-bold text-blue-700 mb-1 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                            Objective
+                          </h4>
+                          <p className="text-sm text-gray-700 leading-relaxed">{report.soap.objective}</p>
+                        </div>
+
+                        <div className="bg-violet-50 rounded-xl p-3 border border-violet-100">
+                          <h4 className="text-xs font-bold text-violet-700 mb-1 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-violet-500"></span>
+                            Assessment
+                          </h4>
+                          <p className="text-sm text-gray-700 leading-relaxed">{report.soap.assessment}</p>
+                        </div>
+
+                        <div className="bg-rose-50 rounded-xl p-3 border border-rose-100">
+                          <h4 className="text-xs font-bold text-rose-700 mb-1 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                            Plan
+                          </h4>
+                          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{report.soap.plan}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1">
+                  <div className="card p-5 flex flex-col h-[420px]">
+                    <div className="flex items-center gap-3 mb-4 shrink-0">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center">
+                        <CalendarDays className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-900">{weeklyReports[2].date}</h3>
+                        <p className="text-xs text-gray-400">AI-Generated Report</p>
+                      </div>
+                    </div>
+
+                    <div className="mb-4 shrink-0">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                        Reported Symptoms
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {weeklyReports[2].symptoms.map((symptom, idx) => (
+                          <span key={idx} className="px-3 py-1 bg-amber-50 text-amber-700 text-xs font-medium rounded-full border border-amber-200">
+                            {symptom}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+                      <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100">
+                        <h4 className="text-xs font-bold text-emerald-700 mb-1 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                          Subjective
+                        </h4>
+                        <p className="text-sm text-gray-700 leading-relaxed">{weeklyReports[2].soap.subjective}</p>
+                      </div>
+
+                      <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
+                        <h4 className="text-xs font-bold text-blue-700 mb-1 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                          Objective
+                        </h4>
+                        <p className="text-sm text-gray-700 leading-relaxed">{weeklyReports[2].soap.objective}</p>
+                      </div>
+
+                      <div className="bg-violet-50 rounded-xl p-3 border border-violet-100">
+                        <h4 className="text-xs font-bold text-violet-700 mb-1 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-violet-500"></span>
+                          Assessment
+                        </h4>
+                        <p className="text-sm text-gray-700 leading-relaxed">{weeklyReports[2].soap.assessment}</p>
+                      </div>
+
+                      <div className="bg-rose-50 rounded-xl p-3 border border-rose-100">
+                        <h4 className="text-xs font-bold text-rose-700 mb-1 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                          Plan
+                        </h4>
+                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{weeklyReports[2].soap.plan}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
 function FutureVisitsCard() {
   const [currentDate, setCurrentDate] = useState(new Date());
 
@@ -532,6 +777,9 @@ export default function PatientDashboard() {
         <div className="grid lg:grid-cols-2 gap-6 mb-6">
           <MedicationCard />
           <HealthDataCard />
+        </div>
+        <div className="mb-6">
+          <AIAnalysisSection />
         </div>
         <div className="grid lg:grid-cols-1 gap-6">
           <HealthLogsSection />

@@ -105,15 +105,19 @@ export async function handleIncoming(req: Request, res: Response, next: NextFunc
                 temperature: '°F', blood_pressure: 'mmHg', bp: 'mmHg',
                 heart_rate: 'bpm', glucose: 'mg/dL', weight: 'kg', spo2: '%',
               };
+              const typeMap: Record<string, string> = {
+                temperature: 'temperature', blood_pressure: 'bp', bp: 'bp',
+                heart_rate: 'heart_rate', glucose: 'glucose', weight: 'weight', spo2: 'spo2',
+              };
               const entries = Array.isArray(biometrics)
                 ? biometrics
-                : Object.entries(biometrics).filter(([, v]) => v != null).map(([k, v]) => ({ type: k, value: String(v), unit: unitMap[k] || '' }));
+                : Object.entries(biometrics).filter(([, v]) => v != null).map(([k, v]) => ({ type: typeMap[k] || k, value: String(v), unit: unitMap[k] || '' }));
 
               for (const b of entries) {
                 try {
                   await BiometricModel.createBiometric({
                     patient_id: patientId,
-                    type: (b as any).type,
+                    type: (b as any).type as any,
                     value: String((b as any).value),
                     unit: (b as any).unit || '',
                     timestamp: new Date().toISOString(),
@@ -241,15 +245,19 @@ export async function simulateMessage(req: Request, res: Response, next: NextFun
               temperature: '°F', blood_pressure: 'mmHg', bp: 'mmHg',
               heart_rate: 'bpm', glucose: 'mg/dL', weight: 'kg', spo2: '%',
             };
+            const typeMap: Record<string, string> = {
+              temperature: 'temperature', blood_pressure: 'bp', bp: 'bp',
+              heart_rate: 'heart_rate', glucose: 'glucose', weight: 'weight', spo2: 'spo2',
+            };
             const entries = Array.isArray(biometrics)
               ? biometrics
-              : Object.entries(biometrics).filter(([, v]) => v != null).map(([k, v]) => ({ type: k, value: String(v), unit: unitMap[k] || '' }));
+              : Object.entries(biometrics).filter(([, v]) => v != null).map(([k, v]) => ({ type: typeMap[k] || k, value: String(v), unit: unitMap[k] || '' }));
 
             for (const b of entries) {
               try {
                 await BiometricModel.createBiometric({
                   patient_id,
-                  type: (b as any).type,
+                  type: (b as any).type as any,
                   value: String((b as any).value),
                   unit: (b as any).unit || '',
                   timestamp: new Date().toISOString(),
