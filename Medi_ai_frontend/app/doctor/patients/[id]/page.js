@@ -296,11 +296,11 @@ export default function PatientDetailsPage({ params }) {
     );
   }
 
-  const handleSendMessage = () => {
-    if (!chatInput.trim()) return;
-    setChatMessages([...chatMessages, { sender: "doctor", content: chatInput }]);
-    setChatInput("");
-  };
+  // const handleSendMessage = () => {
+  //   if (!chatInput.trim()) return;
+  //   setChatMessages([...chatMessages, { sender: "doctor", content: chatInput }]);
+  //   setChatInput("");
+  // };
 
   const patientName = patient.user?.name || patient.name || "Unknown Patient";
   const userInitials = patientName.split(" ").map((n) => n[0]).join("").substring(0, 2).toUpperCase();
@@ -505,14 +505,14 @@ export default function PatientDetailsPage({ params }) {
         </div>
 
         {/* Right Column - Chat */}
-        <motion.div
+        {/* <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.3 }}
           className="card-static flex flex-col h-fit lg:sticky lg:top-6"
           style={{ maxHeight: "calc(100vh - 8rem)" }}
         >
-          {/* <div className="p-4 border-b border-border">
+          <div className="p-4 border-b border-border">
             <h3 className="font-semibold text-gray-900">Chat with Patient</h3>
             <p className="text-xs text-gray-400">Send messages directly</p>
           </div>
@@ -534,9 +534,9 @@ export default function PatientDetailsPage({ params }) {
                 </div>
               </div>
             ))}
-          </div> */}
+          </div>
 
-          {/* <div className="p-4 border-t border-border">
+          <div className="p-4 border-t border-border">
             <div className="flex items-center gap-2">
               <input
                 type="text"
@@ -553,8 +553,8 @@ export default function PatientDetailsPage({ params }) {
                 <Send className="w-4 h-4 text-white" />
               </button>
             </div>
-          </div> */}
-        </motion.div>
+          </div>
+        </motion.div> */}
       </div>
 
       <RecordingModal
