@@ -23,3 +23,10 @@ export async function getAlerts(userId, role = 'patient') {
 export async function markAlertRead(id) {
   return api.post(`/ai/alerts/${id}/read`);
 }
+export async function chatWithAI(text, patientId, userId) {
+  return api.post('/messages/ai-chat', { text, patient_id: patientId, user_id: userId });
+}
+
+export async function getAIChatHistory(patientUserId) {
+  return api.get(`/messages/ai-history/${patientUserId}`);
+}

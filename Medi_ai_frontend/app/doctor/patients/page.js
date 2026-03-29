@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import {
@@ -38,12 +38,41 @@ function AddPatientModal({ isOpen, onClose }) {
   const [recordingTime, setRecordingTime] = useState(0);
   const [transcript, setTranscript] = useState(null);
   const [transcriptError, setTranscriptError] = useState(null);
+  const [loadingSubmit, setLoadingSubmit] = useState(false);
 
   const mediaRecorder = useRef(null);
   const audioChunks = useRef([]);
   const timerRef = useRef(null);
 
   if (!isOpen) return null;
+
+  const handleSubmit = async () => {
+    if (!formData.name.trim()) return alert("Patient Name is required");
+    
+    setLoadingSubmit(true);
+    try {
+      const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+      const res = await fetch(`${BACKEND_URL}/api/auth/quick-add`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to save patient to database");
+      }
+
+      alert("Patient created successfully in Supabase!");
+      onClose();
+      // Optional: Refresh the page to fetch new DB data if the page is wired to backend
+      window.location.reload();
+    } catch (err) {
+      console.error(err);
+      alert("Error adding patient: " + err.message);
+    } finally {
+      setLoadingSubmit(false);
+    }
+  };
 
   const startRecording = async () => {
     try {
@@ -338,12 +367,17 @@ function AddPatientModal({ isOpen, onClose }) {
             <button
               onClick={onClose}
               className="px-5 py-2.5 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+              disabled={loadingSubmit}
             >
               Cancel
             </button>
-            <button onClick={onClose} className="btn-primary text-sm py-2.5 px-6">
-              <Plus className="w-4 h-4" />
-              Add Patient
+            <button onClick={handleSubmit} disabled={loadingSubmit} className="btn-primary text-sm py-2.5 px-6 flex items-center gap-2">
+              {loadingSubmit ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Plus className="w-4 h-4" />
+              )}
+              {loadingSubmit ? "Saving..." : "Add Patient"}
             </button>
           </div>
         </motion.div>
@@ -354,8 +388,27 @@ function AddPatientModal({ isOpen, onClose }) {
 
 export default function PatientsPage() {
   const [search, setSearch] = useState("");
-  const [patientsList, setPatientsList] = useState(initialPatients);
+  const [patientsList, setPatientsList] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchPatients() {
+      try {
+        const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+        const res = await fetch(`${BACKEND_URL}/api/auth/patients`);
+        const json = await res.json();
+        if (json.success) {
+          setPatientsList(json.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch patients", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchPatients();
+  }, []);
 
   const filteredPatients = patientsList.filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase())
@@ -402,14 +455,26 @@ export default function PatientsPage() {
 
       {/* Patient List */}
       <div className="space-y-3">
-        {filteredPatients.map((patient, idx) => (
-          <motion.div
-            key={patient.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.05 }}
-            className="card p-5"
-          >
+        {loading ? (
+          <div className="flex items-center justify-center p-12">
+            <Loader2 className="w-6 h-6 text-primary animate-spin" />
+            <span className="ml-3 text-sm text-gray-500">Loading patients...</span>
+          </div>
+        ) : filteredPatients.length === 0 ? (
+          <div className="flex flex-col items-center justify-center p-16 bg-white rounded-2xl border border-dashed border-border">
+            <UserPlus className="w-10 h-10 text-gray-300 mb-4" />
+            <p className="text-gray-500 font-medium">No patients found</p>
+            <p className="text-sm text-gray-400 mt-1">Add a new patient to get started</p>
+          </div>
+        ) : (
+          filteredPatients.map((patient, idx) => (
+            <motion.div
+              key={patient.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.05 }}
+              className="card p-5"
+            >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-100 to-primary-200 flex items-center justify-center text-primary font-bold">
@@ -467,8 +532,7 @@ export default function PatientsPage() {
               </div>
             </div>
           </motion.div>
-        ))}
-
+        )))}
         {filteredPatients.length === 0 && (
           <div className="text-center py-12 text-gray-400">
             <Search className="w-12 h-12 mx-auto mb-3 opacity-30" />
