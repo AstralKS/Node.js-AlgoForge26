@@ -14,20 +14,17 @@ function getRotatedConfig() {
   logger.info(`🤖 AI call #${callCount} → key=${index + 1}, model=${model}`);
   return { apiKey, model };
 }
-
-// ── Core OpenRouter Call ─────────────────────────────────
+// ── Core OpenRouter Call (Fallback) ──────────────────────
 async function callOpenRouter(
   systemPrompt: string,
   userMessage: string,
   jsonMode = true
 ): Promise<any> {
   const primary = getRotatedConfig();
-
   try {
     return await makeRequest(primary.apiKey, primary.model, systemPrompt, userMessage, jsonMode);
   } catch (err: any) {
-    logger.warn(`⚠️ Primary call failed (key=${callCount % 2 === 0 ? 1 : 2}), trying fallback...`);
-    // Fallback to the other key+model
+    logger.warn(`⚠️ Primary OpenRouter call failed, trying fallback...`);
     const fallback = getRotatedConfig();
     return await makeRequest(fallback.apiKey, fallback.model, systemPrompt, userMessage, jsonMode);
   }
@@ -40,12 +37,11 @@ async function makeRequest(
   userMessage: string,
   jsonMode: boolean
 ): Promise<any> {
-  logger.info(`🌐 Calling OpenRouter: model=${model}`);
-
+  logger.info(`🌐 Calling OpenRouter fallback: model=${model}`);
   const requestBody: any = {
     model,
     messages: [
-      { role: 'system', content: systemPrompt + '\n\nIMPORTANT: Respond ONLY with valid JSON. No markdown, no code fences, no explanations.' },
+      { role: 'system', content: systemPrompt + (jsonMode ? '\n\nIMPORTANT: Respond ONLY with valid JSON. No markdown, no code fences, no explanations.' : '') },
       { role: 'user', content: userMessage },
     ],
     temperature: 0.3,
@@ -65,39 +61,96 @@ async function makeRequest(
 
   if (!response.ok) {
     const errorBody = await response.text();
-    logger.error(`OpenRouter error ${response.status}: ${errorBody}`);
     throw new Error(`OpenRouter ${response.status}: ${errorBody}`);
   }
 
   const data = await response.json() as any;
-  logger.info(`OpenRouter response received, choices: ${data.choices?.length || 0}`);
-
   const content = data.choices?.[0]?.message?.content;
-
-  if (!content) {
-    logger.error('Empty AI response. Full response:', JSON.stringify(data));
-    throw new Error('Empty AI response');
-  }
-
-  logger.info(`AI raw response (first 200 chars): ${content.substring(0, 200)}`);
+  if (!content) throw new Error('Empty AI response from OpenRouter');
 
   if (jsonMode) {
-    // Try direct parse first
     try {
-      return JSON.parse(content);
+      const cleaned = content.replace(/```json\s*|```/g, '').trim();
+      return JSON.parse(cleaned);
     } catch {
-      // Try to extract JSON from markdown code blocks
-      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (jsonMatch) {
-        try { return JSON.parse(jsonMatch[1].trim()); } catch {}
+      const objMatch = content.match(/\{[\s\S]*\}/);
+      if (objMatch) {
+         try { return JSON.parse(objMatch[0]); } catch {}
       }
-      // Try to find JSON object in response
+      return { raw_response: content, parse_error: true };
+    }
+  }
+  return content;
+}
+
+/**
+ * Core Gemini (Google AI Studio) Call
+ */
+async function callGemini(
+  systemPrompt: string,
+  userMessage: string,
+  jsonMode = true
+): Promise<any> {
+  const apiKey = env.GOOGLE_AI_STUDIO_API_KEY;
+  if (!apiKey) {
+    logger.warn('⚠️ GOOGLE_AI_STUDIO_API_KEY not found, falling back to OpenRouter');
+    return callOpenRouter(systemPrompt, userMessage, jsonMode);
+  }
+
+  logger.info(`🌐 Calling Google Gemini API`);
+
+  const requestBody = {
+    contents: [
+      {
+        parts: [
+          { text: systemPrompt + (jsonMode ? '\n\nIMPORTANT: Respond ONLY with valid JSON. No markdown, no code fences, no explanations.' : '') },
+          { text: userMessage }
+        ]
+      }
+    ],
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: 4096,
+    }
+  };
+
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    logger.error(`Gemini API error ${response.status}: ${errorBody}`);
+    // Fallback to OpenRouter if Gemini fails
+    logger.warn('⚠️ Gemini call failed, falling back to OpenRouter...');
+    return callOpenRouter(systemPrompt, userMessage, jsonMode);
+  }
+
+  const data = await response.json() as any;
+  const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  if (!content) {
+    logger.error('Empty Gemini response. Full response:', JSON.stringify(data));
+    throw new Error('Empty Gemini response');
+  }
+
+  logger.info(`Gemini raw response (first 200 chars): ${content.substring(0, 200)}`);
+
+  if (jsonMode) {
+    try {
+      // Clean up markdown if Gemini ignored the instruction
+      const cleaned = content.replace(/```json\s*|```/g, '').trim();
+      return JSON.parse(cleaned);
+    } catch {
       const objMatch = content.match(/\{[\s\S]*\}/);
       if (objMatch) {
         try { return JSON.parse(objMatch[0]); } catch {}
       }
-      // Return raw content as fallback
-      logger.warn('Could not parse AI response as JSON, returning raw');
+      logger.warn('Could not parse Gemini response as JSON, returning raw');
       return { raw_response: content, parse_error: true };
     }
   }
@@ -142,7 +195,7 @@ Return JSON with this exact structure:
     ? `Patient History:\n${patientHistory}\n\nCurrent Report:\n${rawText}`
     : rawText;
 
-  return await callOpenRouter(systemPrompt, userMsg);
+  return await callGemini(systemPrompt, userMsg);
 }
 
 /**
@@ -166,7 +219,14 @@ Return JSON with this exact structure:
   "suggested_reply": "string — a warm, concise WhatsApp reply (2-4 sentences) acknowledging what was recorded, any key observations (e.g. abnormal values), and a next-step tip. Use plain text only, no markdown."
 }`;
 
-  return await callOpenRouter(systemPrompt, rawMessage);
+  return await callGemini(systemPrompt, rawMessage);
+}
+
+/**
+ * Chat with Gemini (conversational, no JSON mode)
+ */
+export async function callGeminiChat(systemPrompt: string, userMessage: string): Promise<string> {
+  return await callGemini(systemPrompt, userMessage, false);
 }
 
 /**
@@ -198,7 +258,7 @@ Return JSON with this exact structure:
   "alerts": [{"type": "critical | warning | info", "message": "string"}]
 }`;
 
-  return await callOpenRouter(systemPrompt, JSON.stringify(patientData));
+  return await callGemini(systemPrompt, JSON.stringify(patientData));
 }
 
 /**
@@ -229,5 +289,25 @@ Return JSON with this exact structure:
   "requires_immediate_review": false
 }`;
 
-  return await callOpenRouter(systemPrompt, JSON.stringify(data));
+  return await callGemini(systemPrompt, JSON.stringify(data));
+}
+
+/**
+ * Generate a clinical SOAP note from a consultation transcript
+ */
+export async function generateSOAPNote(transcript: string) {
+  const systemPrompt = `You are a medical scribe AI. Convert the following consultation transcript into a professional SOAP note.
+  
+Return JSON with this exact structure:
+{
+  "subjective": "string — patient's reported symptoms, history, and concerns",
+  "objective": "string — vital signs, physical exam findings, and observations from the transcript",
+  "assessment": "string — clinical impression and potential diagnoses",
+  "plan": "string — diagnostic tests, treatments, and follow-up instructions",
+  "summary": "string — brief non-technical summary"
+}
+
+IMPORTANT: Be concise and professional. If information is missing from the transcript, use "N/A". Respond ONLY with valid JSON.`;
+
+  return await callGemini(systemPrompt, transcript);
 }

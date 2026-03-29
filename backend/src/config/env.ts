@@ -14,6 +14,7 @@ const envSchema = z.object({
   OPENROUTER_API_KEY_2: z.string().default(''),
   OPENROUTER_MODEL_1: z.string().default('google/gemini-2.0-flash-001'),
   OPENROUTER_MODEL_2: z.string().default('anthropic/claude-3.5-sonnet'),
+  GOOGLE_AI_STUDIO_API_KEY: z.string().default(''),
 
   // AI Service (Python FastAPI)
   AI_SERVICE_URL: z.string().default('http://localhost:8000'),

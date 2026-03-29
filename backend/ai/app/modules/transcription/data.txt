@@ -1,0 +1,40 @@
+====================================================
+RAW TRANSCRIPT
+====================================================
+[0.0s] [UNKNOWN] Um, uh, so, like—
+[1.0s] [UNKNOWN] My testing 1, 2, 3— speaking multiple languages?
+[2.0s] [UNKNOWN] Maybe like—
+[3.0s] [UNKNOWN] I can do
+[4.0s] [UNKNOWN] I can do it.
+[5.0s] [UNKNOWN] Uh, it is also doing the hyphen part as well.
+[6.0s] [UNKNOWN] Interesting.
+[7.0s] [UNKNOWN] Is he drinking a beer?
+[8.0s] [UNKNOWN] Is it drinkable?
+[9.0s] [UNKNOWN] Yes, I agree.
+[10.0s] [UNKNOWN] Is it—
+[11.0s] [UNKNOWN] I think Hindi be—
+[12.0s] [UNKNOWN] I think Hindi be— Hindi, uh—
+[13.0s] [UNKNOWN] I think Hindi be— Hindi, uh—
+[14.0s] [UNKNOWN] Indie transcriptions—
+[15.0s] [UNKNOWN] India Translate—
+[16.0s] [UNKNOWN] India Translate—
+[17.0s] [UNKNOWN] India Translate— um, uh, so, like—
+[18.0s] [UNKNOWN] Indie translators—
+[19.0s] [UNKNOWN] Um, so, like—
+[20.0s] [UNKNOWN] Um, so, like—
+[21.0s] [UNKNOWN] Um, uh, so, like—
+[22.0s] [UNKNOWN] Anna?
+[23.0s] [UNKNOWN] Um, uh, so, like—
+
+====================================================
+        SOAP CLINICAL NOTE (BERT Analysis)
+====================================================
+S — Subjective (Patient Reports):
+  • Um, uh, so, like— My testing 1, 2, 3— speaking multiple languages? Maybe like— I can do I can do it. Uh, it is also doing the hyphen part as…
+O — Objective (Clinician Findings):
+  • No independent clinician observations recorded
+A — Assessment:
+  • Further evaluation required for definitive diagnosis
+P — Plan:
+  • Treatment plan to be determined
+====================================================

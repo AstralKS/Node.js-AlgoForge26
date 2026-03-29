@@ -1,84 +1,93 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { motion } from "framer-motion";
-import { Send, Bot, User, Loader2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Send, Bot, User, Loader2, RefreshCw } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import * as aiService from "@/lib/services/aiService";
 
+const AI_BOT_USER_ID = "00000000-0000-0000-0000-000000000001";
+
 export default function PatientMessagesPage() {
   const { user, patientId } = useAuth();
-  const [messages, setMessages] = useState([
-    {
-      role: "assistant",
-      content: `Hello ${user?.name?.split(" ")[0] || "there"}! I'm your MEDI.AI health assistant. You can:\n\n• Describe symptoms and I'll analyze them\n• Ask about your health status\n• Get medication reminders\n• Request a weekly health report\n\nHow can I help you today?`,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    },
-  ]);
+  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const chatEndRef = useRef(null);
 
   useEffect(() => {
+    if (user?.id) {
+      loadHistory();
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, thinking]);
+
+  const loadHistory = async () => {
+    setLoadingHistory(true);
+    try {
+      const history = await aiService.getAIChatHistory(user.id);
+      const formatted = history.map((m) => ({
+        role: m.sender_id === AI_BOT_USER_ID ? "assistant" : "user",
+        content: m.content,
+        time: new Date(m.created_at).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      }));
+
+      if (formatted.length === 0) {
+        setMessages([
+          {
+            role: "assistant",
+            content: `Hello ${
+              user?.name?.split(" ")[0] || "there"
+            }! I'm your MEDI.AI health assistant. Describe how you're feeling, and I'll help coordinate your care.`,
+            time: new Date().toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          },
+        ]);
+      } else {
+        setMessages(formatted);
+      }
+    } catch (err) {
+      console.error("Failed to load history:", err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
 
   const handleSend = async () => {
     if (!input.trim() || thinking) return;
     const userMsg = input.trim();
     setInput("");
-    const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    setMessages((prev) => [...prev, { role: "user", content: userMsg, time: now }]);
+    const now = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", content: userMsg, time: now },
+    ]);
     setThinking(true);
 
     try {
-      const result = await aiService.analyzeSymptoms(userMsg, patientId);
-      let reply = "";
-      if (typeof result === "string") {
-        reply = result;
-      } else if (typeof result === "object") {
-        const a = result.analysis || result;
-        if (typeof a === "string") {
-          reply = a;
-        } else {
-          const parts = [];
-          
-          // AI Response Render
-          if (a.assessment || a.analysis_notes) parts.push(`**Assessment:** ${a.assessment || a.analysis_notes}`);
-          if (a.summary) parts.push(`**Summary:** ${a.summary}`);
-          if (a.possible_conditions?.length) parts.push(`**Possible Conditions:** ${a.possible_conditions.join(", ")}`);
-          
-          const severity = a.severity_assessment || a.overall_severity || a.risk_level;
-          if (severity) parts.push(`**Severity/Risk:** ${severity}`);
-          
-          const urgency = a.urgency || a.is_emergency || a.requires_urgent_attention;
-          if (urgency) parts.push(`**Urgency:** ${urgency}`);
-          
-          const recs = a.recommendations || a.recommended_actions;
-          if (recs?.length) parts.push(`**Recommendations:**\n${recs.map((r) => `• ${r}`).join("\n")}`);
-          
-          if (a.follow_up) parts.push(`**Follow-up:** ${a.follow_up}`);
-          
-          // AI-Simulated ML Response Render
-          if (a.suggested_condition) {
-            parts.push(`**Suggested condition:** ${a.suggested_condition}`);
-          }
-          if (a.matched_symptoms?.length) {
-            parts.push(`**Matched symptoms:**\n${a.matched_symptoms.map((s) => `• ${s}`).join("\n")}`);
-          }
-
-          reply = parts.length > 0 ? parts.join("\n\n") : JSON.stringify(a, null, 2);
-        }
-      } else {
-        reply = String(result);
-      }
-      
+      const result = await aiService.chatWithAI(userMsg, patientId, user.id);
+      const reply = result.reply || "I'm sorry, I couldn't process that.";
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
           content: reply,
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          time: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
         },
       ]);
     } catch (err) {
@@ -86,79 +95,99 @@ export default function PatientMessagesPage() {
         ...prev,
         {
           role: "assistant",
-          content: `Sorry, I couldn't process that right now. Error: ${err.message}`,
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          content: `Sorry, I couldn't process that right now. Please try again later.`,
+          time: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
         },
       ]);
     }
     setThinking(false);
   };
 
+  if (loadingHistory) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-6 text-gray-400">
+        <Loader2 className="w-8 h-8 animate-spin mb-2" />
+        <p className="text-sm">Loading chat history...</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-gray-50/50">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="p-4 border-b border-border bg-white"
+        className="p-4 border-b border-border bg-white shadow-sm z-10"
       >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary-light flex items-center justify-center">
-            <Bot className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h2 className="font-semibold text-gray-900">MEDI.AI Health Assistant</h2>
-            <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-primary pulse-green" />
-              <span className="text-xs text-gray-400">Connected to AI Backend</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
+              <Bot className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="font-bold text-gray-900 leading-none mb-1">Health Coordinator</h2>
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400">Gemini AI Live</span>
+              </div>
             </div>
           </div>
+          <button 
+            onClick={loadHistory}
+            className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 transition-colors"
+            title="Refresh History"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
         </div>
       </motion.div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
         {messages.map((msg, idx) => (
           <motion.div
             key={idx}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.05 }}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
             className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
           >
             <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+              className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm ${
                 msg.role === "assistant"
-                  ? "bg-primary-100 text-primary"
-                  : "bg-gray-100 text-gray-600"
+                  ? "bg-white text-primary border border-primary/10"
+                  : "bg-primary text-white"
               }`}
             >
               {msg.role === "assistant" ? <Bot className="w-4 h-4" /> : <User className="w-4 h-4" />}
             </div>
             <div
-              className={`max-w-[70%] p-4 rounded-2xl text-sm ${
+              className={`max-w-[85%] sm:max-w-[70%] p-4 rounded-2xl text-sm shadow-sm ${
                 msg.role === "assistant"
                   ? "bg-white border border-border text-gray-700 rounded-tl-sm"
-                  : "bg-primary text-white rounded-tr-sm"
+                  : "bg-white border border-primary/20 text-gray-900 rounded-tr-sm ring-1 ring-primary/5"
               }`}
             >
-              <p className="whitespace-pre-line">{msg.content}</p>
-              <span className={`text-xs mt-2 block ${msg.role === "assistant" ? "text-gray-400" : "text-primary-200"}`}>
+              <div className="whitespace-pre-line leading-relaxed">{msg.content}</div>
+              <div className={`text-[10px] mt-2 font-medium ${msg.role === "assistant" ? "text-gray-300" : "text-primary/40"}`}>
                 {msg.time}
-              </span>
+              </div>
             </div>
           </motion.div>
         ))}
         {thinking && (
           <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-primary-100 text-primary">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-white border border-primary/10 text-primary shadow-sm">
               <Bot className="w-4 h-4" />
             </div>
-            <div className="bg-white border border-border p-4 rounded-2xl rounded-tl-sm">
-              <div className="flex gap-1">
-                <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+            <div className="bg-white border border-border p-4 rounded-2xl rounded-tl-sm shadow-sm">
+              <div className="flex gap-1.5">
+                <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="w-1.5 h-1.5 bg-primary/40 rounded-full" />
+                <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ repeat: Infinity, duration: 1, delay: 0.2 }} className="w-1.5 h-1.5 bg-primary/40 rounded-full" />
+                <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ repeat: Infinity, duration: 1, delay: 0.4 }} className="w-1.5 h-1.5 bg-primary/40 rounded-full" />
               </div>
             </div>
           </div>
@@ -167,25 +196,28 @@ export default function PatientMessagesPage() {
       </div>
 
       {/* Input */}
-      <div className="p-4 border-t border-border bg-white">
-        <div className="flex items-center gap-3">
+      <div className="p-4 md:p-6 border-t border-border bg-white shadow-[0_-4px_12px_rgba(0,0,0,0.02)]">
+        <div className="flex items-center gap-3 bg-gray-50 p-1.5 rounded-2xl border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/5 transition-all">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            placeholder="Describe your symptoms or ask a health question..."
+            placeholder="Type your health update..."
             disabled={thinking}
-            className="flex-1 px-4 py-3 bg-gray-50 rounded-xl text-sm border border-border focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all disabled:opacity-50"
+            className="flex-1 bg-transparent px-4 py-3 text-sm focus:outline-none disabled:opacity-50"
           />
           <button
             onClick={handleSend}
-            disabled={thinking}
-            className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center hover:bg-primary-dark transition-colors disabled:opacity-50"
+            disabled={thinking || !input.trim()}
+            className="w-11 h-11 rounded-xl bg-primary flex items-center justify-center shadow-lg shadow-primary/20 hover:bg-primary-dark transition-all disabled:opacity-40 disabled:shadow-none"
           >
             <Send className="w-4 h-4 text-white" />
           </button>
         </div>
+        <p className="text-[10px] text-gray-400 text-center mt-3 uppercase font-bold tracking-widest opacity-60">
+          AI coordinator can monitor symptoms but does not provide diagnosis
+        </p>
       </div>
     </div>
   );

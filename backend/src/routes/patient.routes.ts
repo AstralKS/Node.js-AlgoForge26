@@ -14,4 +14,13 @@ router.post('/register/doctor', validate(ctrl.registerDoctorSchema), ctrl.regist
 // List users (testing)
 router.get('/users', ctrl.getAllUsers);
 
+// Quick Add Patient from Doctor Dashboard
+router.post('/quick-add', validate(ctrl.quickAddPatientSchema), ctrl.quickAddPatient);
+
+// Get all patients with user details
+router.get('/patients', ctrl.getAllPatientsData);
+
+// Get Full Patient Profile
+router.get('/patient/:id/full-profile', ctrl.getFullPatientProfile);
+
 export default router;

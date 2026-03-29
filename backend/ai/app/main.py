@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import transcription, whatsapp_dummy, reports, analysis, risk
+from .api.routes import transcription, whatsapp_dummy, reports, analysis, risk
 
 app = FastAPI(
     title="MediAI AI Service",
