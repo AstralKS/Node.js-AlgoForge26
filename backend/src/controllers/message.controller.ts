@@ -148,21 +148,8 @@ export async function aiChat(req: Request, res: Response, next: NextFunction) {
     });
 
     // Call AI (try proxy, fallback to direct)
-    let aiReply = '';
-    let aiServiceUp = false;
-    try {
-      const health = await aiProxy.checkAIServiceHealth();
-      aiServiceUp = health;
-    } catch { /* ignore */ }
-
-    logger.info(`🤖 AI Chat for patient ${patient_id}, aiServiceUp=${aiServiceUp}`);
-
-    // Use direct OpenRouter with the coordinator prompt (proxy doesn't support free-form chat)
-    const result = await (aiDirect as any).callOpenRouterChat ?
-      (aiDirect as any).callOpenRouterChat(systemPrompt, text) :
-      callOpenRouterChatDirect(systemPrompt, text);
-
-    aiReply = typeof result === 'string' ? result : result?.response || result?.content || JSON.stringify(result);
+    // Use Gemini for the coordinator chat
+    const aiReply = await aiDirect.callGeminiChat(systemPrompt, text);
 
     // Log both messages to DB (patient → AI bot user)
     const patientUserId = (patient as any)?.user_id || user_id;
@@ -189,28 +176,34 @@ export async function aiChat(req: Request, res: Response, next: NextFunction) {
       }
     }
 
-    // Also: if message contains health update keywords, try to parse and log a symptom
+    // Also: if message contains health update keywords, try to parse and log a symptom in the background
     const conditionKeywords = /\b(pain|hurts?|aching?|fever|headache|dizzy|nausea|vomit|bleed|fatigue|tired|swollen?|rash|cough|shortness of breath|chest)\b/i;
-    let parsedCondition = null;
+    
     if (conditionKeywords.test(text)) {
-      try {
-        const parsed = await aiDirect.analyzeSymptoms(text, undefined);
-        parsedCondition = parsed;
-        // Auto-log symptoms if detected
-        if (parsed?.symptoms?.length > 0) {
-          const SymptomModelDyn = await import('../models/Symptom');
-          for (const sym of parsed.symptoms.slice(0, 3)) {
-            await SymptomModelDyn.createSymptom({
-              patient_id,
-              date: new Date().toISOString(),
-              description: sym.description || sym.name,
-              severity: Math.min(10, Math.max(1, parseInt(sym.severity) || 5)),
-              source: 'manual',
-              ai_analysis: sym,
-            }).catch(() => {});
+      // Run analysis in background so it doesn't block the chat response
+      (async () => {
+        try {
+          logger.info(`🧠 Starting background symptom analysis for patient ${patient_id}`);
+          const parsed = await aiDirect.analyzeSymptoms(text, undefined);
+          
+          if (parsed?.symptoms?.length > 0) {
+            const SymptomModelDyn = await import('../models/Symptom');
+            for (const sym of parsed.symptoms.slice(0, 3)) {
+              await SymptomModelDyn.createSymptom({
+                patient_id,
+                date: new Date().toISOString(),
+                description: sym.description || sym.name,
+                severity: Math.min(10, Math.max(1, parseInt(sym.severity) || 5)),
+                source: 'manual',
+                ai_analysis: sym,
+              }).catch((err) => logger.warn(`⚠️ Failed to auto-log symptom: ${err.message}`));
+            }
+            logger.info(`✅ Background symptom analysis complete for patient ${patient_id}`);
           }
+        } catch (err: any) {
+          logger.warn(`⚠️ Background symptom analysis failed: ${err.message}`);
         }
-      } catch { /* ignore */ }
+      })();
     }
 
     return sendSuccess(res, {
@@ -219,7 +212,6 @@ export async function aiChat(req: Request, res: Response, next: NextFunction) {
         name: (patient as any)?.users?.name || 'Patient',
         diagnosis: (patient as any)?.current_diagnosis,
       },
-      condition_parsed: parsedCondition,
     });
   } catch (err) {
     next(err);

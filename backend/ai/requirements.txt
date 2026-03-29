@@ -1,6 +1,10 @@
 fastapi
 uvicorn
 python-multipart
-faster-whisper
 requests
 pydantic
+python-dotenv
+assemblyai
+supabase
+transformers
+torch

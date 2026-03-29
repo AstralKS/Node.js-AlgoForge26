@@ -610,17 +610,26 @@ function AIAnalysisSection() {
   );
 }
 
-function FutureVisitsCard() {
+function PastVisitsCard() {
+  const { patientId } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [visits, setVisits] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Dummy dates (15th and 22nd of current month, and 5th of next month)
-  const currentMonth = new Date().getMonth();
-  const currentYear = new Date().getFullYear();
-  const highlightedDates = [
-    new Date(currentYear, currentMonth, 15),
-    new Date(currentYear, currentMonth, 22),
-    new Date(currentYear, currentMonth + 1, 5),
-  ];
+  useEffect(() => {
+    if (!patientId) return;
+    import("@/lib/services/visitService").then(visitService => {
+      visitService.getVisitsByPatient(patientId)
+        .then((data) => {
+          const loaded = Array.isArray(data?.data || data) ? (data?.data || data) : [];
+          // Filter to strictly past or today
+          const past = loaded.filter(v => new Date(v.date) <= new Date());
+          setVisits(past);
+        })
+        .catch(console.error)
+        .finally(() => setLoading(false));
+    });
+  }, [patientId]);
 
   const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
   const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
@@ -638,16 +647,23 @@ function FutureVisitsCard() {
     days.push(i);
   }
 
-  const isHighlighted = (day) => {
-    return highlightedDates.some(
-      (d) => d.getDate() === day && d.getMonth() === month && d.getFullYear() === year
-    );
+  const getVisitsForDay = (day) => {
+    return visits.filter((v) => {
+      const d = new Date(v.date);
+      return d.getDate() === day && d.getMonth() === month && d.getFullYear() === year;
+    });
   };
 
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
   const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
-
+  const nextMonthLimit = new Date();
+  
   const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+  const monthVisits = visits.filter(v => {
+    const d = new Date(v.date);
+    return d.getMonth() === month && d.getFullYear() === year;
+  });
 
   return (
     <div className="flex flex-col h-full bg-white border-l border-border p-5 border-b overflow-y-auto">
@@ -656,8 +672,8 @@ function FutureVisitsCard() {
           <CalendarDays className="w-5 h-5 text-white" />
         </div>
         <div>
-          <h3 className="font-semibold text-gray-900">Future Visits</h3>
-          <p className="text-xs text-gray-400">Upcoming appointments</p>
+          <h3 className="font-semibold text-gray-900">Past Visits</h3>
+          <p className="text-xs text-gray-400">Previous appointments</p>
         </div>
       </div>
 
@@ -667,26 +683,36 @@ function FutureVisitsCard() {
             <ChevronLeft className="w-4 h-4" />
           </button>
           <span className="font-semibold text-gray-800 text-sm">{monthNames[month]} {year}</span>
-          <button onClick={nextMonth} className="p-1 hover:bg-gray-200 rounded-lg transition-colors text-gray-600">
+          <button 
+            onClick={nextMonth} 
+            disabled={year === nextMonthLimit.getFullYear() && month === nextMonthLimit.getMonth()}
+            className={`p-1 rounded-lg transition-colors ${year === nextMonthLimit.getFullYear() && month === nextMonthLimit.getMonth() ? "text-gray-300 cursor-not-allowed" : "hover:bg-gray-200 text-gray-600"}`}
+          >
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
         <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-gray-400 mb-2">
           {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => <div key={d}>{d}</div>)}
         </div>
-        <div className="grid grid-cols-7 gap-1 text-center text-sm">
+        <div className="grid grid-cols-7 gap-1 text-center text-sm relative">
+          {loading && (
+            <div className="absolute inset-0 bg-gray-50/80 flex items-center justify-center z-10 rounded-xl">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          )}
           {days.map((day, idx) => {
             if (day === null) return <div key={`empty-${idx}`} />;
-            const highlighted = isHighlighted(day);
+            const dayVisits = getVisitsForDay(day);
             const isToday = new Date().getDate() === day && new Date().getMonth() === new Date().getMonth() && new Date().getFullYear() === new Date().getFullYear();
+            
             return (
               <div
                 key={day}
-                className={`p-1.5 rounded-lg flex items-center justify-center cursor-pointer transition-all duration-200 ${highlighted
+                className={`p-1.5 rounded-lg flex items-center justify-center cursor-default transition-all duration-200 relative ${dayVisits.length > 0
                   ? "bg-indigo-500 text-white font-bold shadow-md transform hover:scale-110"
                   : isToday
                     ? "bg-indigo-50 text-indigo-600 font-bold border border-indigo-100"
-                    : "text-gray-700 hover:bg-gray-200 font-medium"
+                    : "text-gray-700 hover:bg-gray-100 font-medium"
                   }`}
               >
                 {day}
@@ -697,17 +723,17 @@ function FutureVisitsCard() {
       </div>
 
       <div className="shrink-0 space-y-2">
-        {highlightedDates.filter(d => d.getMonth() === month && d.getFullYear() === year).map((d, i) => (
-          <div key={i} className="flex items-center gap-3 p-2.5 bg-indigo-50/50 rounded-lg border border-indigo-100/50">
+        {monthVisits.map((v, i) => (
+          <div key={v.id || i} className="flex items-center gap-3 p-2.5 bg-indigo-50/50 rounded-lg border border-indigo-100/50">
             <div className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
             <div className="flex flex-col">
-              <span className="text-sm font-medium text-gray-800">{monthNames[d.getMonth()]} {d.getDate()}, {d.getFullYear()}</span>
-              <span className="text-xs text-gray-500">Dr. Smith • General Checkup</span>
+              <span className="text-sm font-medium text-gray-800">{monthNames[new Date(v.date).getMonth()]} {new Date(v.date).getDate()}, {new Date(v.date).getFullYear()}</span>
+              <span className="text-xs text-gray-500 truncate max-w-[200px]">{v.notes || "Checkup"}</span>
             </div>
           </div>
         ))}
-        {highlightedDates.filter(d => d.getMonth() === month && d.getFullYear() === year).length === 0 && (
-          <div className="p-3 text-center text-sm text-gray-400 bg-gray-50 rounded-lg">No appointments this month</div>
+        {!loading && monthVisits.length === 0 && (
+          <div className="p-3 text-center text-sm text-gray-400 bg-gray-50 rounded-lg border border-dashed border-gray-200">No past visits recorded this month</div>
         )}
       </div>
     </div>
@@ -794,7 +820,7 @@ export default function PatientDashboard() {
         className="w-80 flex flex-col flex-shrink-0 h-full bg-white shadow-[-4px_0_12px_rgba(0,0,0,0.02)] z-10"
       >
         <div className="flex-1 overflow-hidden" style={{ minHeight: "50%" }}>
-          <FutureVisitsCard />
+          <PastVisitsCard />
         </div>
         <div className="flex-1 overflow-hidden" style={{ minHeight: "50%" }}>
           <DoctorMessagesCard />
